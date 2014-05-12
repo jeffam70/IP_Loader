@@ -18,18 +18,15 @@ implementation
 function CheckTime(Duration: Cardinal = 0): Cardinal;
 {Mark time (if Duration > 0) and note if last time Duration has passed (if Duration = 0).
  Returns time left to complete previous Duration, or 0 if time Duration has already passed.}
-var
-  Time : Cardinal;
 begin
   if Duration > 0 then
     begin {New delay; note time and duration value}
     ctTime := GetMSCount;
     ctDelay := Duration;
     end;
-  {Calculate and return difference between current time and last duration}
-  Time := GetMSCount;
-  {Return difference, accounting for rare case where HighPerformanceCounter overflows}
-  Result := Max(0, Integer(ctDelay - ifthen(Time > ctTime, Time - ctTime, high(Cardinal)-ctTime+Time+1)));
+  {Return difference between current time and last duration (minimum 0)}
+  {NOTE: cast to Integer to allow roll-under calculation, then to Cardinal again; this accomidates for tick counter rollover}
+  Result := Cardinal(Max(0, Integer(ctDelay - (Integer(GetMSCount) - Integer(ctTime)))));
 end;
 
 {----------------------------------------------------------------------------------------------------}
