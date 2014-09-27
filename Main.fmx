@@ -3,8 +3,8 @@ object Form1: TForm1
   Top = 0
   BorderStyle = Single
   Caption = 'Form1'
-  ClientHeight = 401
-  ClientWidth = 392
+  ClientHeight = 436
+  ClientWidth = 402
   FormFactor.Width = 320
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop, iPhone, iPad]
@@ -58,13 +58,13 @@ object Form1: TForm1
     Height = 20.000000000000000000
     Orientation = Horizontal
     Position.X = 14.000000000000000000
-    Position.Y = 360.000000000000000000
+    Position.Y = 384.000000000000000000
     Visible = False
-    Width = 361.000000000000000000
+    Width = 371.000000000000000000
     object ProgressLabel: TLabel
       Height = 17.000000000000000000
       Position.Y = -21.000000000000000000
-      Text = 'Download Progress:'
+      Text = 'Progress:'
       Width = 120.000000000000000000
     end
     object StatusLabel: TLabel
@@ -76,32 +76,32 @@ object Form1: TForm1
   end
   object ButtonLayout: TLayout
     Enabled = False
-    Height = 217.000000000000000000
-    Position.X = 104.000000000000000000
+    Height = 257.000000000000000000
+    Position.X = 208.000000000000000000
     Position.Y = 104.000000000000000000
     Width = 177.000000000000000000
-    object Button1: TButton
-      Height = 22.000000000000000000
-      Position.X = 24.000000000000000000
-      Position.Y = 16.000000000000000000
-      TabOrder = 0
-      Text = 'RESn High'
-      Width = 129.000000000000000000
-      OnClick = Button1Click
-    end
-    object Button2: TButton
+    object RESnHighButton: TButton
       Height = 22.000000000000000000
       Position.X = 24.000000000000000000
       Position.Y = 56.000000000000000000
+      TabOrder = 0
+      Text = 'RESn High'
+      Width = 129.000000000000000000
+      OnClick = RESnHighButtonClick
+    end
+    object RESnLowButton: TButton
+      Height = 22.000000000000000000
+      Position.X = 24.000000000000000000
+      Position.Y = 96.000000000000000000
       TabOrder = 1
       Text = 'RESn Low'
       Width = 129.000000000000000000
-      OnClick = Button2Click
+      OnClick = RESnLowButtonClick
     end
     object ResetPulseButton: TButton
       Height = 22.000000000000000000
       Position.X = 24.000000000000000000
-      Position.Y = 99.000000000000000000
+      Position.Y = 139.000000000000000000
       TabOrder = 2
       Text = 'Reset Pulse'
       Width = 129.000000000000000000
@@ -110,8 +110,8 @@ object Form1: TForm1
     object LoadButton: TButton
       Height = 22.000000000000000000
       Position.X = 24.000000000000000000
-      Position.Y = 139.000000000000000000
-      TabOrder = 3
+      Position.Y = 179.000000000000000000
+      TabOrder = 4
       Text = 'Load'
       Width = 129.000000000000000000
       OnClick = LoadButtonClick
@@ -120,11 +120,20 @@ object Form1: TForm1
       Enabled = False
       Height = 22.000000000000000000
       Position.X = 24.000000000000000000
-      Position.Y = 179.000000000000000000
-      TabOrder = 4
+      Position.Y = 219.000000000000000000
+      TabOrder = 5
       Text = 'Transmit'
       Width = 129.000000000000000000
       OnClick = TransmitButtonClick
+    end
+    object SetConfigurationButton: TButton
+      Height = 22.000000000000000000
+      Position.X = 24.000000000000000000
+      Position.Y = 19.000000000000000000
+      TabOrder = 3
+      Text = 'Set Configuration'
+      Width = 129.000000000000000000
+      OnClick = SetConfigurationButtonClick
     end
   end
   object XBeeInfo: TEdit
@@ -143,5 +152,109 @@ object Form1: TForm1
       Text = 'XBee Info:'
       Width = 54.000000000000000000
     end
+  end
+  object SerialIPGroupBox: TGroupBox
+    Enabled = False
+    Height = 105.000000000000000000
+    Position.X = 16.000000000000000000
+    Position.Y = 120.000000000000000000
+    Text = '"IP" (SerialIP)'
+    Width = 169.000000000000000000
+    TabOrder = 9
+    object EnableIP: TCheckBox
+      Height = 19.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 24.000000000000000000
+      TabOrder = 1
+      Text = 'Enable'
+      Width = 120.000000000000000000
+      OnChange = EnableIPChange
+    end
+    object SetUDP: TRadioButton
+      Enabled = False
+      GroupName = 'SerialIP'
+      Height = 19.000000000000000000
+      IsChecked = True
+      Position.X = 32.000000000000000000
+      Position.Y = 48.000000000000000000
+      TabOrder = 2
+      Text = 'Set to UDP'
+      Width = 120.000000000000000000
+      OnChange = ConfigurationChange
+    end
+    object SetTCP: TRadioButton
+      Tag = 1
+      Enabled = False
+      GroupName = 'SerialIP'
+      Height = 19.000000000000000000
+      Position.X = 32.000000000000000000
+      Position.Y = 72.000000000000000000
+      TabOrder = 3
+      Text = 'Set to TCP'
+      Width = 120.000000000000000000
+      OnChange = ConfigurationChange
+    end
+  end
+  object SerialAPGroupBox: TGroupBox
+    Enabled = False
+    Height = 129.000000000000000000
+    Position.X = 16.000000000000000000
+    Position.Y = 235.000000000000000000
+    Text = '"AP" (SerialMode)'
+    Width = 169.000000000000000000
+    TabOrder = 8
+    object EnableAP: TCheckBox
+      Height = 19.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 24.000000000000000000
+      TabOrder = 1
+      Text = 'Enable'
+      Width = 120.000000000000000000
+      OnChange = EnableAPChange
+    end
+    object SetTransparent: TRadioButton
+      Enabled = False
+      GroupName = 'SerialMode'
+      Height = 19.000000000000000000
+      IsChecked = True
+      Position.X = 32.000000000000000000
+      Position.Y = 48.000000000000000000
+      TabOrder = 2
+      Text = 'Set to Transparent'
+      Width = 120.000000000000000000
+      OnChange = ConfigurationChange
+    end
+    object SetAPI: TRadioButton
+      Tag = 1
+      Enabled = False
+      GroupName = 'SerialMode'
+      Height = 19.000000000000000000
+      Position.X = 32.000000000000000000
+      Position.Y = 72.000000000000000000
+      TabOrder = 3
+      Text = 'Set to API'
+      Width = 120.000000000000000000
+      OnChange = ConfigurationChange
+    end
+    object SetAPIwEsc: TRadioButton
+      Tag = 2
+      Enabled = False
+      GroupName = 'SerialMode'
+      Height = 19.000000000000000000
+      Position.X = 32.000000000000000000
+      Position.Y = 96.000000000000000000
+      TabOrder = 4
+      Text = 'Set to API w/Esc'
+      Width = 120.000000000000000000
+      OnChange = ConfigurationChange
+    end
+  end
+  object AlwaysConfigure: TCheckBox
+    Height = 19.000000000000000000
+    Position.X = 32.000000000000000000
+    Position.Y = 80.000000000000000000
+    TabOrder = 10
+    Text = 'Always Configure'
+    Width = 120.000000000000000000
   end
 end

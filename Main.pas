@@ -37,26 +37,43 @@ type
     ProgressLabel: TLabel;
     StatusLabel: TLabel;
     ButtonLayout: TLayout;
-    Button1: TButton;
-    Button2: TButton;
+    RESnHighButton: TButton;
+    RESnLowButton: TButton;
     ResetPulseButton: TButton;
     LoadButton: TButton;
     TransmitButton: TButton;
     XBeeInfoLabel: TLabel;
     XBeeInfo: TEdit;
-    procedure Button1Click(Sender: TObject);
-    procedure Button2Click(Sender: TObject);
-    procedure IdentifyButtonClick(Sender: TObject);
-    procedure ResetPulseButtonClick(Sender: TObject);
+    SerialIPGroupBox: TGroupBox;
+    EnableIP: TCheckBox;
+    SetUDP: TRadioButton;
+    SetTCP: TRadioButton;
+    SerialAPGroupBox: TGroupBox;
+    EnableAP: TCheckBox;
+    SetTransparent: TRadioButton;
+    SetAPI: TRadioButton;
+    SetAPIwEsc: TRadioButton;
+    SetConfigurationButton: TButton;
+    AlwaysConfigure: TCheckBox;
     procedure FormCreate(Sender: TObject);
-    procedure PCPortComboChange(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure TransmitButtonClick(Sender: TObject);
+    procedure PCPortComboChange(Sender: TObject);
+    procedure IdentifyButtonClick(Sender: TObject);
+    procedure ConfigurationChange(Sender: TObject);
+    procedure SetConfigurationButtonClick(Sender: TObject);
+    procedure RESnHighButtonClick(Sender: TObject);
+    procedure RESnLowButtonClick(Sender: TObject);
+    procedure ResetPulseButtonClick(Sender: TObject);
     procedure LoadButtonClick(Sender: TObject);
+    procedure TransmitButtonClick(Sender: TObject);
+    procedure EnableIPChange(Sender: TObject);
+    procedure EnableAPChange(Sender: TObject);
   private
     { Private declarations }
-    procedure GenerateResetSignal;
-    function EnforceXBeeConfiguration: Boolean;
+    procedure InitializeProgress(MaxIndex: Cardinal; AmendMaxIndex: Cardinal = 0);
+    procedure UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
+    procedure GenerateResetSignal(ShowProgress: Boolean = False);
+    function  EnforceXBeeConfiguration(ShowProgress: Boolean = False; FinalizeProgress: Boolean = False): Boolean;
     procedure GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer);
   public
     { Public declarations }
@@ -134,16 +151,50 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.Button1Click(Sender: TObject);
+procedure TForm1.PCPortComboChange(Sender: TObject);
+{XBee Wi-Fi selected; configure to communicate with it}
+var
+  PXB : PXBee;
 begin
-  XBee.SetItem(xbIO2Mode, pinOutHigh);
-end;
-
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.Button2Click(Sender: TObject);
-begin
-  XBee.SetItem(xbIO2Mode, pinOutLow);
+  if IgnorePCPortChange then exit;
+  if (PCPortCombo.ItemIndex > -1) and (PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag > -1) then
+    begin {If XBee Wi-Fi module item selected}
+    PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
+    {Note our IP address used to access it; used later to set it's destination IP for serial to Wi-Fi communcation back to us}
+    HostIPAddr := IPv4ToDWord(PXB.HostIPAddr);
+    SendDebugMessage('Selected HostIPAddr: ' + HostIPAddr.ToString, True);
+    {Update information field}
+    XBeeInfo.Text := '[ ' + FormatMACAddr(PXB.MacAddrHigh, PXB.MacAddrLow) + ' ]  -  ' + PXB.IPAddr + ' : ' + inttostr(PXB.IPPort);
+    {Set remote serial IP address and port and enable buttons}
+    XBee.RemoteIPAddr := PXB.IPAddr;
+    XBee.RemoteSerialIPPort := PXB.IPPort;
+    SendDebugMessage('Selected RemoteSerialIPPort: ' + XBee.RemoteSerialIPPort.ToString, True);
+    SerialIPGroupBox.Enabled := True;
+    SerialAPGroupBox.Enabled := True;
+    ButtonLayout.Enabled := True;
+    end
+  else
+    begin {Else, possibly "Advanced Options" selected}
+    IgnorePCPortChange := True;
+    try
+      {Clear display and disable buttons}
+      HostIPAddr := 0;
+      XBeeInfo.Text := '';
+      XBee.RemoteIPAddr := '';
+      XBee.RemoteSerialIPPort := 0;
+      SerialIPGroupBox.Enabled := False;
+      SerialAPGroupBox.Enabled := False;
+      ButtonLayout.Enabled := False;
+      {Remove "None Found..." message, if any}
+      if (PCPortCombo.Count = 2) and (PCPortCombo.ListItems[0].Tag = -1) then PCPortCombo.Items.Delete(0);
+      {Reset combo box selection}
+      PCPortCombo.ItemIndex := -1;
+      {Display advanced search options}
+      AdvancedSearchForm.ShowModal;
+    finally
+      IgnorePCPortChange := False;
+    end;
+    end;
 end;
 
 {----------------------------------------------------------------------------------------------------}
@@ -264,6 +315,198 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
+procedure TForm1.ConfigurationChange(Sender: TObject);
+var
+  PXB : PXbee;
+begin
+  PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
+  PXB.CfgChecksum := CSumUnknown;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+
+procedure TForm1.SetConfigurationButtonClick(Sender: TObject);
+begin
+  EnforceXBeeConfiguration(True, True);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.RESnHighButtonClick(Sender: TObject);
+begin
+  InitializeProgress(2);
+  UpdateProgress(+1, 'Setting RESn High');
+  XBee.SetItem(xbIO2Mode, pinOutHigh);
+  UpdateProgress(+1);
+  IndySleep(750);
+  UpdateProgress(0, '', False);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.RESnLowButtonClick(Sender: TObject);
+begin
+  InitializeProgress(2);
+  UpdateProgress(+1, 'Setting RESn Low');
+  XBee.SetItem(xbIO2Mode, pinOutLow);
+  UpdateProgress(+1);
+  IndySleep(750);
+  UpdateProgress(0, '', False);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.ResetPulseButtonClick(Sender: TObject);
+begin
+  GenerateResetSignal(True);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.LoadButtonClick(Sender: TObject);
+var
+  FStream     : TFileStream;
+  ImageSize   : Integer;
+  FName       : String;
+
+    {----------------}
+
+    procedure ValidateImageDataIntegrity(Buffer: PByteArray; ImageSize: Integer; Filename: String);
+    {Validate Propeller application image data integrity in Buffer.  This is done through a series of tests that verify that the file is not too small.
+     Also installs initial call frame.
+
+     PROPELLER APPLICATION FORMAT:
+       The Propeller Application image consists of data blocks for initialization, program, variables, and data/stack space.  The first block, initialization, describes the application's
+       startup paramemters, including the position of the other blocks within the image, as shown below.
+
+         long 0 (bytes 0:3) - Clock Frequency
+         byte 4             - Clock Mode
+         byte 5             - Checksum (this value causes additive checksum of bytes 0 to ImageLimit-1 to equal 0)
+         word 3             - Start of Code pointer (must always be $0010)
+         word 4             - Start of Variables pointer
+         word 5             - Start of Stack Space pointer
+         word 6             - Current Program pointer (points to first public method of object)
+         word 7             - Current Stack Space pointer (points to first run-time usable space of stack)
+
+     WHAT GETS DOWNLOADED:
+       To save time, the Propeller Tool does not download the entire Propeller Application Image.  Instead, it downloads only the parts of the image from long 0 through the end of code (up to the
+       start of variables) and then the Propeller chip itself writes zeros (0) to the rest of the RAM/EEPROM, after the end of code (up to 32 Kbytes), and inserts the initial call frame in the
+       proper location.  This effectively clears (initializes) all global variables to zero (0) and sets all available stack and free space to zero (0) as well.
+
+     INITIAL CALL FRAME:
+       The Initial Call Frame is stuffed into the Propeller Application's image at location DBase-8 (eight bytes (2 longs) before the start of stack space).  The Propeller Chip itself stores the
+       Initial Call Frame into those locations at the end of the download process.  The initial call frame is exactly like standard run-time call frames in their format, but different in value.
+
+             Call Frame Format:  PBase VBase DBase PCurr Return Extra... (each are words arranged in this order from Word0 to Word3; 4 words = two longs)
+       Initial Call Frame Data:  $FFFF $FFF9 $FFFF $FFF9  n/a    n/a
+
+       Note: PBase is Start of Object Program, VBase is Start of Variables, DBase is Start of Data/Stack, PCurr is current program location (PC).
+
+       The Initial Call Frame is stuffed prior to DBase so that if one-too-many returns are executed by the Spin-based Propeller Application, the Initial Call Frame is popped off the stack next
+       which instructs the Spin Interpreter to jump to location $FFF9 (PCurr) and execute the byte code there (which is two instructions to perform a "Who am I?" followed by a cog stop, "COGID ID"
+       and "COGSTOP ID", to halt the cog).  NOTE: The two duplicate longs $FFFFFFF9 are used for simplicity and the first long just happens to set the right bits to indicate to an ABORT command
+       that it has reached the point where it should stop popping the stack and actually execute code.
+
+       Note that a Call Frame is followed by one or more longs of data.  Every call, whether it be to an inter-object method or an intra-object method, results in a call frame that consists
+       of the following:
+
+             Return Information     : 2 longs (first two longs shown in Call Frame Format, above, but with different data)
+             Return Result          : 1 long
+             Method Parameters      : x longs (in left-to-right order)
+             Local Variables        : y longs (in left-to-right order)
+             Intermediate Workspace : z longs
+
+       The first four items in the call stack are easy to determine from the code.  The last, Intermediate Workspace, is much more difficult because it relates directly to how and when the
+       interpreter pushes and pops items on the stack during expression evaluations.}
+
+    var
+      Idx      : Integer;
+      CheckSum : Byte;
+    begin
+      {Raise exception if file truncated}
+      if (ImageSize < 16) or (ImageSize < PWordArray(Buffer)[4]) then
+        raise EFileCorrupt.Create(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is truncated or is not a Propeller Application' + ifthen(Filename <> '',' file', '') + '!'+#$D#$A#$D#$A+ifthen(Filename <> '', 'File', 'Image') + ' size is less than 16 bytes or is less than word 4 (VarBase) indicates.');
+      if (PWordArray(Buffer)[3] <> $0010) then
+        raise EFileCorrupt.Create('Initialization code invalid!  ' + ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is corrupt or is not a Propeller Application' + ifthen(Filename <> '',' file', '') +'!'+#$D#$A#$D#$A+'Word 3 (CodeBase) must be $0010.');
+      {Write initial call frame}
+//      copymemory(@Buffer[min($7FF8, max($0010, PWordArray(Buffer)[5] - 8))], @InitCallFrame[0], 8);
+      move(InitCallFrame[0], Buffer[min($7FF8, max($0010, PWordArray(Buffer)[5] - 8))], 8);
+      {Raise exception if file's checksum incorrect}
+      CheckSum := 0;
+      for Idx := 0 to ImageLimit-1 do CheckSum := CheckSum + Buffer[Idx];
+      if CheckSum <> 0 then
+        raise EFileCorrupt.Create('Checksum Error!  ' + ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is corrupt or is not a Propeller Application' + ifthen(Filename <> '',' file', '') +'!'+#$D#$A#$D#$A+'Byte 5 (Checksum) is incorrect.');
+      {Check for extra data beyond code}
+      Idx := PWordArray(Buffer)[4];
+      while (Idx < ImageSize) and ((Buffer[Idx] = 0) or ((Idx >= PWordArray(Buffer)[5] - 8) and (Idx < PWordArray(Buffer)[5]) and (Buffer[Idx] = InitCallFrame[Idx-(PWordArray(Buffer)[5]-8)]))) do inc(Idx);
+      if Idx < ImageSize then
+        begin
+//        {$IFDEF ISLIB}
+//        if (CPrefs[GUIDisplay].IValue in [0, 2]) then  {Dialog display needed?  Show error.}
+//        {$ENDIF}
+//          begin
+//          MessageBeep(MB_ICONWARNING);
+          raise EFileCorrupt.Create(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' contains data after code space' + {$IFNDEF ISLIB}' that was not generated by the Propeller Tool' +{$ENDIF} '.  This data will not be displayed or downloaded.');
+//          messagedlg(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' contains data after code space' + {$IFNDEF ISLIB}' that was not generated by the Propeller Tool'{$ENDIF}+ '.  This data will not be displayed or downloaded.', mtWarning, [mbOK], 0);
+//          end;
+        end;
+    end;
+
+    {----------------}
+
+begin
+  {Process file/image}
+  {Set open dialog parameters}
+  OpenDialog.Title := 'Download Propeller Application Image';
+  OpenDialog.Filter := 'Propeller Applications (*.binary, *.eeprom)|*.binary;*.eeprom|All Files (*.*)|*.*';
+  OpenDialog.FilterIndex := 0;
+  OpenDialog.FileName := '';
+  {Show Open Dialog}
+  if not OpenDialog.Execute then exit;
+  FName := OpenDialog.Filename;
+  if fileexists(FName) then
+    begin {File found, load it up}
+    {Initialize}
+    ImageSize := 0;
+    fillchar(FBinImage[0], ImageLimit, 0);
+    {Load the file}
+    FStream := TFileStream.Create(FName, fmOpenRead+fmShareDenyWrite);
+    try
+      ImageSize := FStream.Read(FBinImage^, ImageLimit);
+    finally
+      FStream.Free;
+    end;
+    end;
+  try
+    {Validate application image (and install initial call frame)}
+    ValidateImageDataIntegrity(FBinImage, min(ImageLimit, ImageSize), FName);
+    FBinSize := ImageSize div 4;
+    {Download image to Propeller chip (use VBase (word 4) value as the 'image long-count size')}
+//    Propeller.Download(Buffer, PWordArray(Buffer)[4] div 4, DownloadCmd);
+    TransmitButton.Enabled := True;
+  except
+    on E: EFileCorrupt do
+      begin {Image corrupt, show error and exit}
+//      if (CPrefs[GUIDisplay].IValue in [0, 2]) then
+//        begin
+          TransmitButton.Enabled := False;
+          ShowMessage(E.Message);
+//        ErrorMsg('052-'+E.Message);                     {Dialog display needed?  Show error.}
+//        end
+//      else
+//        begin
+//        {$IFDEF ISLIBWRAP}
+//        StdOutMsg(pmtError, '052-'+E.Message);          {Else only write message to standard out}
+//        {$ENDIF}
+//        end;
+      exit;
+      end;
+  end;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
 procedure TForm1.TransmitButtonClick(Sender: TObject);
 var
   i                : Integer;
@@ -303,48 +546,6 @@ const
    begin
      Result := Max(MinSerTimeout, Min(XBee.UDPMaxRoundTrip*DynamicWaitFactor, SerTimeout));
      SendDebugMessage('          - MaxRoundTrip: ' + XBee.UDPMaxRoundTrip.ToString+ ' DynamicSerTimeout: ' + Result.ToString, True);
-   end;
-
-   {----------------}
-
-   procedure UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
-   {Update progress bar.}
-   begin
-     if Offset > 0 then
-       begin
-       if Progress.Tag = 0 then
-         begin
-         Progress.Opacity := 1;
-         Progress.Value := Progress.Value + Offset;
-         end
-       else
-         Progress.Tag := Min(0, Progress.Tag + Offset);
-       end
-     else
-       begin
-       if Offset = Integer.MinValue then Offset := -Trunc(Progress.Value);
-       if Offset < 0 then
-         begin
-         Progress.Tag := Offset;
-         Progress.Opacity := 0.5;
-         end;
-       end;
-     if Status <> '' then StatusLabel.Text := Status;
-     Progress.Visible := Show;
-     Application.ProcessMessages;
-//     SendDebugMessage('Progress Updated: ' + Trunc(Progress.Value).ToString + ' of ' + Trunc(Progress.Max).ToString, True);
-   end;
-
-   {----------------}
-
-   procedure InitializeProgress(MaxIndex: Cardinal);
-   {Initialize Progress Bar}
-   begin
-     Progress.Value := 0;
-     Progress.Max := MaxIndex;
-     Progress.Tag := 0;
-     StatusLabel.Text := '';
-     UpdateProgress(0);
    end;
 
    {----------------}
@@ -568,198 +769,20 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.LoadButtonClick(Sender: TObject);
-var
-  FStream     : TFileStream;
-  ImageSize   : Integer;
-  FName       : String;
-
-    {----------------}
-
-    procedure ValidateImageDataIntegrity(Buffer: PByteArray; ImageSize: Integer; Filename: String);
-    {Validate Propeller application image data integrity in Buffer.  This is done through a series of tests that verify that the file is not too small.
-     Also installs initial call frame.
-
-     PROPELLER APPLICATION FORMAT:
-       The Propeller Application image consists of data blocks for initialization, program, variables, and data/stack space.  The first block, initialization, describes the application's
-       startup paramemters, including the position of the other blocks within the image, as shown below.
-
-         long 0 (bytes 0:3) - Clock Frequency
-         byte 4             - Clock Mode
-         byte 5             - Checksum (this value causes additive checksum of bytes 0 to ImageLimit-1 to equal 0)
-         word 3             - Start of Code pointer (must always be $0010)
-         word 4             - Start of Variables pointer
-         word 5             - Start of Stack Space pointer
-         word 6             - Current Program pointer (points to first public method of object)
-         word 7             - Current Stack Space pointer (points to first run-time usable space of stack)
-
-     WHAT GETS DOWNLOADED:
-       To save time, the Propeller Tool does not download the entire Propeller Application Image.  Instead, it downloads only the parts of the image from long 0 through the end of code (up to the
-       start of variables) and then the Propeller chip itself writes zeros (0) to the rest of the RAM/EEPROM, after the end of code (up to 32 Kbytes), and inserts the initial call frame in the
-       proper location.  This effectively clears (initializes) all global variables to zero (0) and sets all available stack and free space to zero (0) as well.
-
-     INITIAL CALL FRAME:
-       The Initial Call Frame is stuffed into the Propeller Application's image at location DBase-8 (eight bytes (2 longs) before the start of stack space).  The Propeller Chip itself stores the
-       Initial Call Frame into those locations at the end of the download process.  The initial call frame is exactly like standard run-time call frames in their format, but different in value.
-
-             Call Frame Format:  PBase VBase DBase PCurr Return Extra... (each are words arranged in this order from Word0 to Word3; 4 words = two longs)
-       Initial Call Frame Data:  $FFFF $FFF9 $FFFF $FFF9  n/a    n/a
-
-       Note: PBase is Start of Object Program, VBase is Start of Variables, DBase is Start of Data/Stack, PCurr is current program location (PC).
-
-       The Initial Call Frame is stuffed prior to DBase so that if one-too-many returns are executed by the Spin-based Propeller Application, the Initial Call Frame is popped off the stack next
-       which instructs the Spin Interpreter to jump to location $FFF9 (PCurr) and execute the byte code there (which is two instructions to perform a "Who am I?" followed by a cog stop, "COGID ID"
-       and "COGSTOP ID", to halt the cog).  NOTE: The two duplicate longs $FFFFFFF9 are used for simplicity and the first long just happens to set the right bits to indicate to an ABORT command
-       that it has reached the point where it should stop popping the stack and actually execute code.
-
-       Note that a Call Frame is followed by one or more longs of data.  Every call, whether it be to an inter-object method or an intra-object method, results in a call frame that consists
-       of the following:
-
-             Return Information     : 2 longs (first two longs shown in Call Frame Format, above, but with different data)
-             Return Result          : 1 long
-             Method Parameters      : x longs (in left-to-right order)
-             Local Variables        : y longs (in left-to-right order)
-             Intermediate Workspace : z longs
-
-       The first four items in the call stack are easy to determine from the code.  The last, Intermediate Workspace, is much more difficult because it relates directly to how and when the
-       interpreter pushes and pops items on the stack during expression evaluations.}
-
-    var
-      Idx      : Integer;
-      CheckSum : Byte;
-    begin
-      {Raise exception if file truncated}
-      if (ImageSize < 16) or (ImageSize < PWordArray(Buffer)[4]) then
-        raise EFileCorrupt.Create(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is truncated or is not a Propeller Application' + ifthen(Filename <> '',' file', '') + '!'+#$D#$A#$D#$A+ifthen(Filename <> '', 'File', 'Image') + ' size is less than 16 bytes or is less than word 4 (VarBase) indicates.');
-      if (PWordArray(Buffer)[3] <> $0010) then
-        raise EFileCorrupt.Create('Initialization code invalid!  ' + ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is corrupt or is not a Propeller Application' + ifthen(Filename <> '',' file', '') +'!'+#$D#$A#$D#$A+'Word 3 (CodeBase) must be $0010.');
-      {Write initial call frame}
-//      copymemory(@Buffer[min($7FF8, max($0010, PWordArray(Buffer)[5] - 8))], @InitCallFrame[0], 8);
-      move(InitCallFrame[0], Buffer[min($7FF8, max($0010, PWordArray(Buffer)[5] - 8))], 8);
-      {Raise exception if file's checksum incorrect}
-      CheckSum := 0;
-      for Idx := 0 to ImageLimit-1 do CheckSum := CheckSum + Buffer[Idx];
-      if CheckSum <> 0 then
-        raise EFileCorrupt.Create('Checksum Error!  ' + ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' is corrupt or is not a Propeller Application' + ifthen(Filename <> '',' file', '') +'!'+#$D#$A#$D#$A+'Byte 5 (Checksum) is incorrect.');
-      {Check for extra data beyond code}
-      Idx := PWordArray(Buffer)[4];
-      while (Idx < ImageSize) and ((Buffer[Idx] = 0) or ((Idx >= PWordArray(Buffer)[5] - 8) and (Idx < PWordArray(Buffer)[5]) and (Buffer[Idx] = InitCallFrame[Idx-(PWordArray(Buffer)[5]-8)]))) do inc(Idx);
-      if Idx < ImageSize then
-        begin
-//        {$IFDEF ISLIB}
-//        if (CPrefs[GUIDisplay].IValue in [0, 2]) then  {Dialog display needed?  Show error.}
-//        {$ENDIF}
-//          begin
-//          MessageBeep(MB_ICONWARNING);
-          raise EFileCorrupt.Create(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' contains data after code space' + {$IFNDEF ISLIB}' that was not generated by the Propeller Tool' +{$ENDIF} '.  This data will not be displayed or downloaded.');
-//          messagedlg(ifthen(Filename <> '', 'File '''+Filename+'''', 'Image') + ' contains data after code space' + {$IFNDEF ISLIB}' that was not generated by the Propeller Tool'{$ENDIF}+ '.  This data will not be displayed or downloaded.', mtWarning, [mbOK], 0);
-//          end;
-        end;
-    end;
-
-    {----------------}
-
+procedure TForm1.EnableIPChange(Sender: TObject);
 begin
-  {Process file/image}
-  {Set open dialog parameters}
-  OpenDialog.Title := 'Download Propeller Application Image';
-  OpenDialog.Filter := 'Propeller Applications (*.binary, *.eeprom)|*.binary;*.eeprom|All Files (*.*)|*.*';
-  OpenDialog.FilterIndex := 0;
-  OpenDialog.FileName := '';
-  {Show Open Dialog}
-  if not OpenDialog.Execute then exit;
-  FName := OpenDialog.Filename;
-  if fileexists(FName) then
-    begin {File found, load it up}
-    {Initialize}
-    ImageSize := 0;
-    fillchar(FBinImage[0], ImageLimit, 0);
-    {Load the file}
-    FStream := TFileStream.Create(FName, fmOpenRead+fmShareDenyWrite);
-    try
-      ImageSize := FStream.Read(FBinImage^, ImageLimit);
-    finally
-      FStream.Free;
-    end;
-    end;
-  try
-    {Validate application image (and install initial call frame)}
-    ValidateImageDataIntegrity(FBinImage, min(ImageLimit, ImageSize), FName);
-    FBinSize := ImageSize div 4;
-    {Download image to Propeller chip (use VBase (word 4) value as the 'image long-count size')}
-//    Propeller.Download(Buffer, PWordArray(Buffer)[4] div 4, DownloadCmd);
-    TransmitButton.Enabled := True;
-  except
-    on E: EFileCorrupt do
-      begin {Image corrupt, show error and exit}
-//      if (CPrefs[GUIDisplay].IValue in [0, 2]) then
-//        begin
-          TransmitButton.Enabled := False;
-          ShowMessage(E.Message);
-//        ErrorMsg('052-'+E.Message);                     {Dialog display needed?  Show error.}
-//        end
-//      else
-//        begin
-//        {$IFDEF ISLIBWRAP}
-//        StdOutMsg(pmtError, '052-'+E.Message);          {Else only write message to standard out}
-//        {$ENDIF}
-//        end;
-      exit;
-      end;
-  end;
+  SetUDP.Enabled := EnableIP.IsChecked;
+  SetTCP.Enabled := EnableIP.IsChecked;
 end;
 
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.ResetPulseButtonClick(Sender: TObject);
+procedure TForm1.EnableAPChange(Sender: TObject);
 begin
-  GenerateResetSignal;
+  SetTransparent.Enabled := EnableAP.IsChecked;
+  SetAPI.Enabled := EnableAP.IsChecked;
+  SetAPIwEsc.Enabled := EnableAP.IsChecked;
 end;
-
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.PCPortComboChange(Sender: TObject);
-{XBee Wi-Fi selected; configure to communicate with it}
-var
-  PXB : PXBee;
-begin
-  if IgnorePCPortChange then exit;
-  if (PCPortCombo.ItemIndex > -1) and (PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag > -1) then
-    begin {If XBee Wi-Fi module item selected}
-    PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
-    {Note our IP address used to access it; used later to set it's destination IP for serial to Wi-Fi communcation back to us}
-    HostIPAddr := IPv4ToDWord(PXB.HostIPAddr);
-    SendDebugMessage('Selected HostIPAddr: ' + HostIPAddr.ToString, True);
-    {Update information field}
-    XBeeInfo.Text := '[ ' + FormatMACAddr(PXB.MacAddrHigh, PXB.MacAddrLow) + ' ]  -  ' + PXB.IPAddr + ' : ' + inttostr(PXB.IPPort);
-    {Set remote serial IP address and port and enable buttons}
-    XBee.RemoteIPAddr := PXB.IPAddr;
-    XBee.RemoteSerialIPPort := PXB.IPPort;
-    SendDebugMessage('Selected RemoteSerialIPPort: ' + XBee.RemoteSerialIPPort.ToString, True);
-    ButtonLayout.Enabled := True;
-    end
-  else
-    begin {Else, possibly "Advanced Options" selected}
-    IgnorePCPortChange := True;
-    try
-      {Clear display and disable buttons}
-      HostIPAddr := 0;
-      XBeeInfo.Text := '';
-      XBee.RemoteIPAddr := '';
-      XBee.RemoteSerialIPPort := 0;
-      ButtonLayout.Enabled := False;
-      {Remove "None Found..." message, if any}
-      if (PCPortCombo.Count = 2) and (PCPortCombo.ListItems[0].Tag = -1) then PCPortCombo.Items.Delete(0);
-      {Reset combo box selection}
-      PCPortCombo.ItemIndex := -1;
-      {Display advanced search options}
-      AdvancedSearchForm.ShowModal;
-    finally
-      IgnorePCPortChange := False;
-    end;
-    end;
-end;
-
 
 {----------------------------------------------------------------------------------------------------}
 {----------------------------------------------------------------------------------------------------}
@@ -767,22 +790,89 @@ end;
 {----------------------------------------------------------------------------------------------------}
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.GenerateResetSignal;
-{Generate Reset Pulse}
+procedure TForm1.InitializeProgress(MaxIndex: Cardinal; AmendMaxIndex: Cardinal = 0);
+{Initialize Progress Bar to a range of 0..MaxIndex, or 0..<current max>+AmendMaxIndex}
 begin
-{ TODO : Enhance GenerateResetSignal for errors. }
-  if EnforceXBeeConfiguration then
-    if not XBee.SetItem(xbOutputState, $0010) then            {Start reset pulse (low) and serial hold (high)}
-      raise Exception.Create('Error Generating Reset Signal');
+  if AmendMaxIndex = 0 then
+    begin
+    Progress.Value := 0;
+    Progress.Max := MaxIndex;
+    Progress.Tag := 0;
+    StatusLabel.Text := '';
+    UpdateProgress(0);
+    end
+  else
+    Progress.Max := Progress.Max + AmendMaxIndex;
 end;
 
 {----------------------------------------------------------------------------------------------------}
 
-function TForm1.EnforceXBeeConfiguration: Boolean;
+procedure TForm1.UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
+{Update progress bar.
+Offset is +/- value to increment or decrement progress bar value.
+Status is an optional string to appear above progress bar.
+Show is an optional make progress bar visible / invisible indicator.}
+begin
+  if Offset > 0 then
+    begin
+    if Progress.Tag = 0 then
+      begin
+      Progress.Opacity := 1;
+      Progress.Value := Progress.Value + Offset;
+      end
+    else
+      Progress.Tag := Min(0, Progress.Tag + Offset);
+    end
+  else
+    begin
+    if Offset = Integer.MinValue then Offset := -Trunc(Progress.Value);
+    if Offset < 0 then
+      begin
+      Progress.Tag := Offset;
+      Progress.Opacity := 0.5;
+      end;
+    end;
+  if Status <> '' then StatusLabel.Text := Status;
+  Progress.Visible := Show;
+  Application.ProcessMessages;
+//    SendDebugMessage('Progress Updated: ' + Trunc(Progress.Value).ToString + ' of ' + Trunc(Progress.Max).ToString, True);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.GenerateResetSignal(ShowProgress: Boolean = False);
+{Generate Reset Pulse}
+begin
+{ TODO : Enhance GenerateResetSignal for errors. }
+  try
+    if EnforceXBeeConfiguration(ShowProgress) then
+      begin
+      if ShowProgress then
+        begin
+        InitializeProgress(0, +2);
+        UpdateProgress(+1, 'Pulsing RESn');
+        end;
+      if not XBee.SetItem(xbOutputState, $0010) then            {Start reset pulse (low) and serial hold (high)}
+        raise Exception.Create('Error Generating Reset Signal');
+      end;
+  finally
+    if ShowProgress then
+      begin
+      UpdateProgress(+1);
+      IndySleep(750);
+      UpdateProgress(0, '', False);
+      end;
+  end;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+function TForm1.EnforceXBeeConfiguration(ShowProgress: Boolean = False; FinalizeProgress: Boolean = False): Boolean;
 {Validate necessary XBee configuration; set attributes if needed.
  Returns True if XBee properly configured; false otherwise.}
 var
   PXB : PXbee;
+
     {----------------}
 
     function Validate(Attribute: xbCommand; Value: Cardinal; ReadOnly: Boolean = False): Boolean;
@@ -807,25 +897,57 @@ begin
 { TODO : Enhance Enforce... to log any error }
   PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
 
-  Result := (PXB.CfgChecksum <> CSumUnknown) and (Validate(xbChecksum, PXB.CfgChecksum, True));   {Is the configuration known and valid?}
-  if not Result then                                                                              {If not...}
-    begin
-    Validate(xbSerialIP, SerialUDP, False);                                                       {  Ensure XBee's Serial Service uses UDP packets [WRITE DISABLED DUE TO FIRMWARE BUG]}
-    Validate(xbIPDestination, HostIPAddr);                                                        {  Ensure Serial-to-IP destination is us (our IP)}
-    Validate(xbOutputMask, $7FFF);                                                                {  Ensure output mask is proper (default, in this case)}
-    Validate(xbRTSFLow, pinEnabled);                                                              {  Ensure RTS flow pin is enabled (input)}
-    Validate(xbIO4Mode, pinOutLow);                                                               {  Ensure serial hold pin is set to output low}
-    Validate(xbIO2Mode, pinOutHigh);                                                              {  Ensure reset pin is set to output high}
-    Validate(xbIO4Timer, 2);                                                                      {  Ensure serial hold pin's timer is set to 200 ms}
-    Validate(xbIO2Timer, 1);                                                                      {  Ensure reset pin's timer is set to 100 ms}
-    Validate(xbSerialMode, TransparentMode {APIwoEscapeMode} {APIwEscapeMode}, False);            {  Ensure Serial Mode is transparent [WRITE DISABLED DUE TO FIRMWARE BUG]}
-    Validate(xbSerialBaud, InitialBaud);                                                          {  Ensure baud rate is set to initial speed}
-    Validate(xbSerialParity, ParityNone);                                                         {  Ensure parity is none}
-    Validate(xbSerialStopBits, StopBits1);                                                        {  Ensure stop bits is 1}
-    Validate(xbPacketingTimeout, 3);                                                              {  Ensure packetization timout is 3 character times}
-    XBee.GetItem(xbChecksum, PXB.CfgChecksum);                                                    {  Record new configuration checksum}
-    Result := True;
-    end;
+  if AlwaysConfigure.IsChecked then PXB.CfgChecksum := CSumUnknown;
+  
+  if ShowProgress then InitializeProgress(16);
+  try
+    if ShowProgress then UpdateProgress(+1, 'Verifying configuration');
+    Result := (PXB.CfgChecksum <> CSumUnknown) and (Validate(xbChecksum, PXB.CfgChecksum, True));   {Is the configuration known and valid?}
+    if not Result then
+      begin                                                                                         {If not...}
+      if ShowProgress then UpdateProgress(+1, 'Validating SerialIP (IP)');
+      Validate(xbSerialIP, ifthen(SetUDP.IsChecked, SerialUDP, SerialTCP), not EnableIP.IsChecked); {  Ensure XBee's Serial Service uses UDP packets}
+      if ShowProgress then UpdateProgress(+1, 'Validating IPDestination (DL)');
+      Validate(xbIPDestination, HostIPAddr);                                                        {  Ensure Serial-to-IP destination is us (our IP)}
+      if ShowProgress then UpdateProgress(+1, 'Validating OutputMask (OM)');
+      Validate(xbOutputMask, $7FFF);                                                                {  Ensure output mask is proper (default, in this case)}
+      if ShowProgress then UpdateProgress(+1, 'Validating RTSFlow (D6)');
+      Validate(xbRTSFLow, pinEnabled);                                                              {  Ensure RTS flow pin is enabled (input)}
+      if ShowProgress then UpdateProgress(+1, 'Validating IO4Mode (D4)');
+      Validate(xbIO4Mode, pinOutLow);                                                               {  Ensure serial hold pin is set to output low}
+      if ShowProgress then UpdateProgress(+1, 'Validating IO2Mode (D2)');
+      Validate(xbIO2Mode, pinOutHigh);                                                              {  Ensure reset pin is set to output high}
+      if ShowProgress then UpdateProgress(+1, 'Validating IO4Timer (T4)');
+      Validate(xbIO4Timer, 2);                                                                      {  Ensure serial hold pin's timer is set to 200 ms}
+      if ShowProgress then UpdateProgress(+1, 'Validating IO2Timer (T2)');
+      Validate(xbIO2Timer, 1);                                                                      {  Ensure reset pin's timer is set to 100 ms}
+      if ShowProgress then UpdateProgress(+1, 'Validating SerialMode (AP)');
+      Validate(xbSerialMode, ifthen(SetTransparent.IsChecked, TransparentMode,                      {  Ensure Serial Mode is transparent}
+                             ifthen(SetAPI.IsChecked, APIwoEscapeMode, APIwEscapeMode)), not EnableAP.IsChecked);
+      if ShowProgress then UpdateProgress(+1, 'Validating SerialBaud (BD)');
+      Validate(xbSerialBaud, InitialBaud);                                                          {  Ensure baud rate is set to initial speed}
+      if ShowProgress then UpdateProgress(+1, 'Validating SerialParity (NB)');
+      Validate(xbSerialParity, ParityNone);                                                         {  Ensure parity is none}
+      if ShowProgress then UpdateProgress(+1, 'Validating SerialStopBits (SB)');
+      Validate(xbSerialStopBits, StopBits1);                                                        {  Ensure stop bits is 1}
+      if ShowProgress then UpdateProgress(+1, 'Validating PacketingTimeout (RO)');
+      Validate(xbPacketingTimeout, 3);                                                              {  Ensure packetization timout is 3 character times}
+      if ShowProgress then UpdateProgress(+1, 'Reading new checksum (CK)');
+      XBee.GetItem(xbChecksum, PXB.CfgChecksum);                                                    {  Record new configuration checksum}
+      Result := True;
+      end
+    else
+      begin                                                                                         {Else, if known and valid...}
+      if ShowProgress then UpdateProgress(15);
+      end;
+  finally
+    if ShowProgress then
+      begin
+      UpdateProgress(+1);
+      IndySleep(750);
+      if FinalizeProgress then UpdateProgress(0, '', False);
+      end;
+  end;
 end;
 
 {--------------------------------------------------------------------------------}

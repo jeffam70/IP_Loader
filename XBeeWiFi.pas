@@ -667,8 +667,8 @@ begin
 { TODO : Protect against too big a data buffer (ParamData) }
   SetLength(FTxBuf, 8 + ord(Command <> xbData)*(1+1+2) + ParamLength);                {Size TxBuf for Application Header (8 bytes) plus (if not Data command; FrameID (1) and ConfigOptions (1) and ATCommand (2)),  plus ParameterValue (0+)}
   FPTxBuf := PxbTxPacket(@FTxBuf[0]);                                                 {Point PTxBuf at TxBuf}
-  FPTxBuf.Number1 := Random($FFFF);                                                   {Randomize Number1 ID}
-  FPTxBuf.Number2 := FPTxBuf.Number1 xor $4242;                                       {Prepare Number2 to match requirements}
+  {FPTxBuf.Number1 := ?;                                                              This value will be set upon transmission}
+  {FPTxBuf.Number2 := ? xor $4242;                                                    This value will be set upon transmission}
   FPTxBuf.PacketID := 0;                                                              {PacketID (always 0)}
   FPTxBuf.EncryptionPad := 0;                                                         {EncryptionPad (always 0)}
   FPTxBuf.CommandID := ifthen(Command <> xbData, RemoteCommand, DataCommand);         {Set to be remote command or data command}
@@ -700,7 +700,6 @@ function TXBeeWiFi.TransmitAppUDP(ExpectMultiple: Boolean = False; AutoRetry: Bo
  If AutoRetry is true, the packet is automatically retransmitted if expected response(s) not received.}
 var
   RLIdx         : Integer;              // response list index
-//  IP            : String;
   RequiredRx    : Cardinal;             // bit 0 = Packet ACK received, bit 1 = Command response received
   Count         : Cardinal;             // Number of bytes received in response
   Status        : Cardinal;             // $0-OK, $1-Error, $2=Invalid command, $3=Invalid parameter
@@ -739,6 +738,9 @@ begin
       Status := 0;                                                                                             {  Initialize status}
       RLIdx := -1;                                                                                             {  Clear response list index}
       SetLength(FResponseList, 0);                                                                             {  Clear the response list}
+      {Randomize packet header (Number1 and Number2); must happen for each transmission}
+      FPTxBuf.Number1 := Random($FFFF);                                                                        {Randomize Number1 ID}
+      FPTxBuf.Number2 := FPTxBuf.Number1 xor $4242;                                                            {Prepare Number2 to match requirements}
       {Try to transmit; IP exceptions handled}
       FUDPRoundTrip := Ticks;                                                                                  {  Note start time for round-trip measurement}
       FAppUDPClient.SendBuffer(FTxBuf);                                                                        {  Send to Remote IP}
@@ -748,9 +750,10 @@ begin
         if FPRxBuf.Number1 xor $4242 = FPRxBuf.Number2 then                                                    {  if packet is an XBee Wi-Fi response packet (Number2 is Number1 ^ $4242)}
           begin {It's an XBee Response packet}
           if (FPRxBuf.CommandID = $80) then RequiredRx := RequiredRx or PacketAck;                             {    Note when we received XBee Wi-Fi UDP ACK packet}
-          if (FPRxBuf.CommandID = (FPTxBuf.CommandID or $80)) and (FPRxBuf.ATCommand = FPTxBuf.ATCommand) then
+          if (FPRxBuf.Number1 = FPTxBuf.Number1) and (FPRxBuf.CommandID = (FPTxBuf.CommandID or $80)) and
+             (FPRxBuf.ATCommand = FPTxBuf.ATCommand) then
             begin
-            RequiredRx := RequiredRx or CommandRsp or (FPRxBuf.Status shl 2);                                  {      Note when we received XBee Wi-Fi UDP command response packet}
+            RequiredRx := RequiredRx or CommandRsp or (FPRxBuf.Status shl 2);                                  {      Note when we received response to our XBee Wi-Fi UDP command packet}
             Status := Status or FPRxBuf.Status;
             inc(RLIdx);
             SetLength(FResponseList, RLIdx+1);                                                                 {      Make room for response}
