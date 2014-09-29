@@ -551,6 +551,11 @@ const
    {----------------}
 
    function TransmitPacket: Integer;
+
+
+{ TODO : Revise this to eliminate timeing dependency check and instead rely on Transmission ID.  Also, randomize Transmission ID.  This may be best done by removing placement of Random Transmission ID outside of this TransmitPacket submethod. }
+
+
    {Transmit (and retransmit if necessary) the packet in TxBuf, waiting for non-retransmit response or timeout.
     Returns response value (if any), raises exception otherwise.}
    var
@@ -685,7 +690,7 @@ begin
             {Now loader starts up in the Propeller; wait for loader's "ready" signal}
             UpdateProgress(+1);
             Acknowledged := XBee.ReceiveUDP(RxBuf, DynamicSerTimeout);                                    {Receive loader's response}
-            if not Acknowledged or (Length(RxBuf) <> 4) then                                              {Verify ready signal format}
+            if not Acknowledged or (Length(RxBuf) <> 8) then                                              {Verify ready signal format}
               raise ESoftDownload.Create('Error: No "Ready" signal from loader!');
             if Cardinal(RxBuf[0]) <> PacketID then                                                        {Verify ready signal}
               raise EHardDownload.Create('Error: Loader''s "Ready" signal unrecognized!');
@@ -713,14 +718,16 @@ begin
         {Transmit packetized target application}
         i := 0;
         repeat {Transmit target application packets}                                             {Transmit application image}
-          TxBuffLength := 1 + Min((XBee.MaxDataSize div 4)-1, FBinSize - i);                     {  Determine packet length (in longs); header + packet limit or remaining data length}
+          TxBuffLength := 2 + Min((XBee.MaxDataSize div 4)-1, FBinSize - i);                     {  Determine packet length (in longs); header + packet limit or remaining data length}
           SetLength(TxBuf, TxBuffLength*4);                                                      {  Set buffer length (Packet Length) (in longs)}
-          Move(PacketID, TxBuf[0], 4);                                                           {  Store Packet ID}
-          Move(FBinImage[i*4], TxBuf[4], (TxBuffLength-1)*4);                                    {  Store section of data}
+{ TODO : Make Transmission ID random }
+          Move(random, TxBuf[0], 4);                                                             {  Store Transmission ID}
+          Move(PacketID, TxBuf[4], 4);                                                           {  Store Packet ID}
+          Move(FBinImage[i*4], TxBuf[8], (TxBuffLength-2)*4);                                    {  Store section of data}
           UpdateProgress(0, 'Sending packet: ' + (TotalPackets-PacketID+1).ToString + ' of ' + TotalPackets.ToString);
           if TransmitPacket <> PacketID-1 then                                                   {  Transmit packet (retransmit as necessary)}
             raise EHardDownload.Create('Error: communication failed!');                          {    Error if unexpected response}
-          inc(i, TxBuffLength-1);                                                                {  Increment image index}
+          inc(i, TxBuffLength-2);                                                                {  Increment image index}
           dec(PacketID);                                                                         {  Decrement Packet ID (to next packet)}
         {repeat - Transmit target application packets...}
         until PacketID = 0;                                                                      {Loop until done}
@@ -1080,24 +1087,25 @@ const
   it assists with the remainder of the download (at a faster speed and with more relaxed interstitial timing conducive of Internet Protocol delivery.
   This memory image isn't used as-is; before download, it is first adjusted to contain special values assigned by this host (communication timing and
   synchronization values) and then is translated into an optimized Propeller Download Stream understandable by the Propeller ROM-based boot loader.}
-  RawLoaderImage : array[0..347] of byte = ($00,$B4,$C4,$04,$6F,$C3,$10,$00,$5C,$01,$64,$01,$54,$01,$68,$01,
-                                            $4C,$01,$02,$00,$44,$01,$00,$00,$48,$E8,$BF,$A0,$48,$EC,$BF,$A0,
-                                            $49,$A0,$BC,$A1,$01,$A0,$FC,$28,$F1,$A1,$BC,$80,$A0,$9E,$CC,$A0,
-                                            $49,$A0,$BC,$F8,$F2,$8F,$3C,$61,$05,$9E,$FC,$E4,$04,$A4,$FC,$A0,
-                                            $4E,$A2,$BC,$A0,$08,$9C,$FC,$20,$FF,$A2,$FC,$60,$00,$A3,$FC,$68,
-                                            $01,$A2,$FC,$2C,$49,$A0,$BC,$A0,$F1,$A1,$BC,$80,$01,$A2,$FC,$29,
-                                            $49,$A0,$BC,$F8,$48,$E8,$BF,$70,$11,$A2,$7C,$E8,$0A,$A4,$FC,$E4,
-                                            $4A,$92,$BC,$A0,$4C,$3C,$FC,$50,$54,$A6,$FC,$A0,$53,$3A,$BC,$54,
-                                            $53,$56,$BC,$54,$53,$58,$BC,$54,$04,$A4,$FC,$A0,$00,$A8,$FC,$A0,
-                                            $4C,$9E,$BC,$A0,$4B,$A0,$BC,$A1,$00,$A2,$FC,$A0,$80,$A2,$FC,$72,
-                                            $F2,$8F,$3C,$61,$21,$9E,$F8,$E4,$31,$00,$78,$5C,$F1,$A1,$BC,$80,
-                                            $49,$A0,$BC,$F8,$F2,$8F,$3C,$61,$00,$A3,$FC,$70,$01,$A2,$FC,$29,
-                                            $26,$00,$4C,$5C,$51,$A8,$BC,$68,$08,$A8,$FC,$20,$4D,$3C,$FC,$50,
-                                            $1E,$A4,$FC,$E4,$01,$A6,$FC,$80,$19,$00,$7C,$5C,$1E,$9E,$BC,$A0,
-                                            $FF,$9F,$FC,$60,$4C,$9E,$7C,$86,$00,$84,$68,$0C,$4E,$A8,$3C,$C2,
-                                            $09,$00,$54,$5C,$01,$9C,$FC,$C1,$55,$00,$70,$5C,$55,$A6,$FC,$84,
-                                            $40,$AA,$3C,$08,$04,$80,$FC,$80,$43,$74,$BC,$80,$3A,$A6,$FC,$E4,
-                                            $55,$74,$FC,$54,$09,$00,$7C,$5C,$00,$00,$00,$00,$00,$00,$00,$00,
+  RawLoaderImage : array[0..363] of byte = ($00,$B4,$C4,$04,$6F,$1D,$10,$00,$6C,$01,$74,$01,$64,$01,$78,$01,
+                                            $5C,$01,$02,$00,$54,$01,$00,$00,$4C,$E8,$BF,$A0,$4C,$EC,$BF,$A0,
+                                            $4D,$62,$BF,$A1,$01,$62,$FF,$28,$F1,$63,$BF,$80,$A0,$60,$CF,$A0,
+                                            $4D,$62,$BF,$F8,$F2,$97,$3C,$61,$05,$60,$FF,$E4,$52,$22,$FC,$54,
+                                            $02,$66,$FF,$A0,$4D,$62,$BF,$A0,$F1,$63,$BF,$80,$04,$68,$FF,$A0,
+                                            $08,$6A,$FF,$A0,$4D,$62,$BF,$F8,$4C,$E8,$BF,$64,$01,$A4,$FC,$21,
+                                            $4D,$62,$BF,$F8,$4C,$E8,$BF,$70,$11,$6A,$FF,$E4,$4D,$62,$BF,$F8,
+                                            $4C,$E8,$BF,$68,$0E,$68,$FF,$E4,$47,$22,$BC,$80,$0D,$66,$FF,$E4,
+                                            $4E,$9A,$BC,$A0,$50,$44,$FC,$50,$53,$5E,$FF,$A0,$AF,$43,$BC,$54,
+                                            $AF,$5F,$BC,$54,$AF,$61,$BC,$54,$04,$68,$FF,$A0,$00,$A6,$FC,$A0,
+                                            $50,$60,$BF,$A0,$4F,$62,$BF,$A1,$00,$64,$FF,$A0,$80,$64,$FF,$72,
+                                            $F2,$97,$3C,$61,$25,$60,$FB,$E4,$35,$00,$78,$5C,$F1,$63,$BF,$80,
+                                            $4D,$62,$BF,$F8,$F2,$97,$3C,$61,$00,$65,$FF,$70,$01,$64,$FF,$29,
+                                            $2A,$00,$4C,$5C,$B2,$A7,$BC,$68,$08,$A6,$FC,$20,$51,$44,$FC,$50,
+                                            $22,$68,$FF,$E4,$01,$5E,$FF,$80,$1D,$00,$7C,$5C,$22,$60,$BF,$A0,
+                                            $FF,$61,$FF,$60,$50,$60,$7F,$86,$00,$8C,$68,$0C,$52,$A8,$3C,$C2,
+                                            $09,$00,$54,$5C,$01,$A4,$FC,$C1,$55,$00,$70,$5C,$55,$5E,$FF,$84,
+                                            $44,$AA,$3C,$08,$04,$88,$FC,$80,$47,$7C,$BC,$80,$3E,$5E,$FF,$E4,
+                                            $55,$7C,$FC,$54,$09,$00,$7C,$5C,$00,$00,$00,$00,$00,$00,$00,$00,
                                             $80,$00,$00,$00,$00,$02,$00,$00,$00,$80,$00,$00,$FF,$FF,$F9,$FF,
                                             $10,$C0,$07,$00,$00,$00,$00,$80,$00,$00,$00,$40,$B6,$02,$00,$00,
                                             $5B,$01,$00,$00,$08,$02,$00,$00,$55,$73,$CB,$00,$50,$45,$01,$00,
@@ -1111,18 +1119,18 @@ const
   MaxRxSenseError = 23;                   {Maximum number of cycles by which the detection of a start bit could be off (as affected by the Loader code)}
 
   {Loader VerifyRAM snippet}
-  VerifyRAM : array[0..67] of byte = ($44,$A4,$BC,$A0,$40,$A4,$BC,$84,$02,$A4,$FC,$2A,$40,$82,$14,$08,
-                                      $04,$80,$D4,$80,$58,$A4,$D4,$E4,$0A,$A4,$FC,$04,$04,$A4,$FC,$84,
-                                      $52,$8A,$3C,$08,$04,$A4,$FC,$84,$52,$8A,$3C,$08,$01,$80,$FC,$84,
-                                      $40,$A4,$BC,$00,$52,$82,$BC,$80,$60,$80,$7C,$E8,$41,$9C,$BC,$A4,
-                                      $09,$00,$7C,$5C);
+  RawLoaderImage : array[0..67] of byte = ($48,$66,$BF,$A0,$44,$66,$BF,$84,$02,$66,$FF,$2A,$44,$8A,$14,$08,
+                                           $04,$88,$D4,$80,$58,$66,$D7,$E4,$0A,$66,$FF,$04,$04,$66,$FF,$84,
+                                           $B3,$93,$3C,$08,$04,$66,$FF,$84,$B3,$93,$3C,$08,$01,$88,$FC,$84,
+                                           $44,$68,$BF,$00,$B4,$8B,$BC,$80,$60,$88,$7C,$E8,$45,$A4,$BC,$A4,
+                                           $09,$00,$7C,$5C);
 
   {Loader LaunchStart snippet}
-  LaunchStart : array[0..27] of byte = ($B8,$68,$FC,$58,$58,$68,$FC,$50,$09,$00,$7C,$5C,$06,$80,$FC,$04,
-                                        $10,$80,$7C,$86,$00,$84,$54,$0C,$02,$8C,$7C,$0C);
+  RawLoaderImage : array[0..27] of byte = ($B8,$70,$FC,$58,$58,$70,$FC,$50,$09,$00,$7C,$5C,$06,$88,$FC,$04,
+                                           $10,$88,$7C,$86,$00,$8C,$54,$0C,$02,$94,$7C,$0C);
 
   {Loader LaunchFinal snippet}
-  LaunchFinal : array[0..15] of byte = ($06,$80,$FC,$04,$10,$80,$7C,$86,$00,$84,$54,$0C,$02,$8C,$7C,$0C);
+  RawLoaderImage : array[0..15] of byte = ($06,$88,$FC,$04,$10,$88,$7C,$86,$00,$8C,$54,$0C,$02,$94,$7C,$0C);
 
   {Loader executable snippets}
   ExeSnippet : array[ltVerifyRAM..ltLaunchFinal] of PByteArray =  (@VerifyRAM, @VerifyRAM, @LaunchStart, @LaunchFinal);
