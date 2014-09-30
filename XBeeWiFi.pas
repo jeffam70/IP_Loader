@@ -168,7 +168,7 @@ type
     property UDPRoundTrip : Integer read FUDPRoundTrip;                                                    {Get last round-trip time for UDP App Packets for this device}
 { TODO : Ensure UDPRoundTrip and MaxUDPRoundTrip is reset with device changes. }
     property UDPMaxRoundTrip : Integer read FMaxUDPRoundTrip;                                              {Get maximum rount-trip time for UDP App Packets for this device}
-    { TODO : Determin if MaxDataSize property should retrieve the actual value when called. }
+    { TODO : Determine if MaxDataSize property should retrieve the actual value when called. }
     property MaxDataSize : Cardinal read FMaxDataSize;                                                     {Get maximum packet payload size}
   private
     { Private declarations }
