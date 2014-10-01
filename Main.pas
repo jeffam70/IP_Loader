@@ -7,7 +7,6 @@ uses
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls, FMX.Edit, FMX.ListBox, FMX.ListView,
   XBeeWiFi,
   IdGlobal, IdBaseComponent, IdComponent, IdRawBase, IdRawClient, IdIcmpClient, IdStack, FMX.Layouts, FMX.Memo,
-  Time,
   Advanced,
   Debug;
 
@@ -86,7 +85,6 @@ type
 
 var
   Form1              : TForm1;
-  Time               : TTime;
   HostIPAddr         : Cardinal;         {Our IP Address (can be different if multiple network adapters)}
   XBee               : TXBeeWiFi;
   TxBuf              : TIdBytes;         {Transmit packet (resized per packet)}
@@ -135,7 +133,6 @@ implementation
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  Time := TTime.Create;
   XBee := TXBeeWiFi.Create;
   XBee.SerialTimeout := SerTimeout;
   XBee.ApplicationTimeout := AppTimeout;
@@ -146,7 +143,6 @@ end;
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   XBee.Destroy;
-  Time.Destroy;
 end;
 
 {----------------------------------------------------------------------------------------------------}
@@ -559,36 +555,35 @@ const
      Rnd   : Cardinal;
    begin
      Retry := 3;
-     repeat {(Re)Transmit packet}                                                           {  Send application image packet, get acknowledgement, retransmit as necessary}
+     repeat {(Re)Transmit packet}                                                                {Send application image packet, get acknowledgement, retransmit as necessary}
        if Retry < 3 then UpdateProgress(-1);
 
        UpdateProgress(+1);
 
        SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' Transmitting packet ' + PacketID.ToString, True);
 
-       Rnd := Random($FFFFFFFF);                                                            {  Generate random Transmission ID}
-       Move(Rnd, TxBuf[0], 4);                                                              {  Store Random Transmission ID}
+       Rnd := Random($FFFFFFFF);                                                                 {  Generate random Transmission ID}
+       Move(Rnd, TxBuf[0], 4);                                                                   {  Store Random Transmission ID}
 
-       Time.Left(Trunc((Length(TxBuf)*10/FinalBaud)*1000));                                 {    Mark required Tx time}
        if not XBee.SendUDP(TxBuf, True, False) then
          raise EHardDownload.Create('Error: Can not transmit packet!');
 
        SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Waiting for packet acknowledgement', True);
 
-       if not IgnoreResponse then
-         begin
-         Acknowledged := XBee.ReceiveUDP(RxBuf, DynamicSerTimeout) and (Length(RxBuf) = 8);   {    Wait for positive/negative acknowledgement, or timeout}
-         RemainingTxTime := Time.Left;                                                        {    Check remaining time to transmit (should be 0 ms)}
-         if RemainingTxTime > 0 then SendDebugMessage('          - ERROR: Remaining Tx Time: ' + RemainingTxTime.ToString, True);
-         dec(Retry);                                                                          {  Loop and retransmit until timely non-retransmit acknowledgement received, or retry count exhausted}
-         end;
-     {Repeat - (Re)Transmit packet...}
+       repeat                                                                                    {  Wait for positive/negative acknowledgement of this}
+         Acknowledged := not IgnoreResponse and XBee.ReceiveUDP(RxBuf, DynamicSerTimeout);       {  specific transmission, or timeout.  This loop throws}
+       until not Acknowledged or ((Length(RxBuf) = 8) and (Long(@RxBuf[4]) = Long(@TxBuf[0])));  {  out acknowledgements to previous transmissions received now.}
 
-     { TODO : Revisit phase variance timing trap }
-     { TODO : Revise this to eliminate timing dependency check and instead rely on Transmission ID. }
-     until IgnoreResponse or ( Acknowledged and (RemainingTxTime = 0) and (Long(@RxBuf[0]) <> Long(@TxBuf[4])) ) or (Retry = 0);
-     if not ( IgnoreResponse or ( Acknowledged and (RemainingTxTime = 0) and (Long(@RxBuf[0]) <> Long(@TxBuf[4])) ) ) then
-       raise EHardDownload.Create('Error: connection lost!');                               {  No acknowledgement received? Error}
+       Acknowledged := Acknowledged and (Long(@RxBuf[0]) <> Long(@TxBuf[4]));
+
+       dec(Retry);                                                                               {  Loop and retransmit until timely non-retransmit acknowledgement received, or retry count exhausted}
+
+     {Repeat - (Re)Transmit packet...}
+     until IgnoreResponse or Acknowledged or (Retry = 0);
+
+     if not (IgnoreResponse or Acknowledged) then
+       raise EHardDownload.Create('Error: connection lost!');                                    {No acknowledgement received? Error}
+
      Result := IfThen(not IgnoreResponse, Long(@RxBuf[0]), 0);
    end;
 
@@ -632,19 +627,13 @@ begin
 
           {Generate initial packet (handshake, timing templates, and Propeller Loader's Download Stream) all stored in TxBuf}
           GenerateLoaderPacket(ltCore, TotalPackets);
-//exit;
+
           SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Connecting...', True);
 
           try {Connecting...}
             {(Enforce XBee Configuration and...) Generate reset signal, then wait for serial transfer window}
             UpdateProgress(0, 'Connecting');
             GenerateResetSignal;
-
-            //      SetLength(TxBuf, 1);
-//      TxBuf[0] := 0;
-//      XBee.SendUDP(TxBuf, False);
-
-//            IndySleep(190);   Timing handled by flow control now
 
             SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Sending handshake and loader image', True);
 
@@ -749,7 +738,7 @@ begin
 
         {Send verified/launch command}                                                           {Verified/Launch}
         GenerateLoaderPacket(ltLaunchStart, PacketID);                                           {Generate LaunchStart executable packet}
-        if TransmitPacket <> PacketID-1 then                                                     {Transmit packet (retransmit as necessary)}
+        if TransmitPacket <> PacketID-1 then                                                     {Transmit packet (Launch step 1); retransmit as necessary}
           raise EHardDownload.Create('Error: communication failed!');                            {  Error if unexpected response}
         dec(PacketID);                                                                           {Ready next packet}
 
