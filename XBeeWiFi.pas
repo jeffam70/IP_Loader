@@ -715,11 +715,16 @@ const
     function AppUDPResponse: Boolean;
     {Unless we've received all the expected packets, check for another UDP packet for up to FTimeout milliseconds.
     Return True/False (packet received) and store packet size in Count.}
+//    var
+//      VIP : String;
+//      VPort : Word;
     begin
       Result := RequiredRx < PacketAck + ord(FPTxBuf.CommandID <> DataCommand)*CommandRsp + ord(ExpectMultiple)*MuliRsp;
       if Result then
         begin
         Count := FAppUDPClient.ReceiveBuffer(FRxBuf);
+//        Count := FAppUDPClient.ReceiveBuffer(FRxBuf, VIP, VPort);
+//        SendDebugMessage(GStack.HostName + ' ' + GStack.LocalAddress + '  ' + FAppUDPClient.Binding.IP + ':' + FAppUDPClient.Binding.Port.ToString + '  -  ' + VIP + ':' + VPort.ToString, True);
         Result := Count > 0;
         end;
     end;

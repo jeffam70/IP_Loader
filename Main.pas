@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.StrUtils, System.Types, System.UITypes, System.Classes, System.Variants, System.Math,
-  FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls, FMX.Edit, FMX.ListBox, FMX.ListView,
+  FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls, FMX.Edit, FMX.ListBox, FMX.ListView, FMX.Controls.Presentation,
   XBeeWiFi,
   IdGlobal, IdBaseComponent, IdComponent, IdRawBase, IdRawClient, IdIcmpClient, IdStack, FMX.Layouts, FMX.Memo,
   Advanced,
@@ -211,7 +211,7 @@ var
     begin
       XBee.RemoteIPAddr := DestinationIP;
       AdvancedSearchForm.LastSearchedListView.Items.Add.Text := DestinationIP;
-      SendDebugMessage('Host: ' + HostIP + 'Broadcast: ' + DestinationIP , True);
+      SendDebugMessage('Host: ' + HostIP + ' Destination: ' + DestinationIP , True);
       if XBee.GetItem(xbIPAddr, Nums) then
         begin
         SendDebugMessage('Got IP Address', True);
@@ -287,7 +287,7 @@ begin
       SendIdentificationPacket(MakeDWordIntoIPv4Address(IPv4ToDWord(GStack.LocalAddresses[IPIdx]) or $000000FF), GStack.LocalAddresses[IPIdx]);
     SendDebugMessage('Searching Custom Network', True);
     for IPIdx := 0 to AdvancedSearchForm.CustomListView.Items.Count-1 do {For all custom networks}
-      SendIdentificationPacket(AdvancedSearchForm.CustomListView.Items[IPIdx].Text {, Need to find a host IP here!});
+      SendIdentificationPacket(AdvancedSearchForm.CustomListView.Items[IPIdx].Text, GStack.LocalAddress);
 
     {Do final updating of PCPortCombo list}
     SendDebugMessage('Finalizing PC Port List', True);
