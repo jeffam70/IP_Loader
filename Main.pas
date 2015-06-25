@@ -8,7 +8,7 @@ uses
   XBeeWiFi,
   IdGlobal, IdBaseComponent, IdComponent, IdRawBase, IdRawClient, IdIcmpClient, IdStack, FMX.Layouts, FMX.Memo,
   Advanced,
-  Debug;
+  Debug, FMX.Objects;
 
 type
   TLoaderType = (ltCore, ltVerifyRAM, ltProgramEEPROM, ltLaunchStart, ltLaunchFinal);
@@ -35,12 +35,10 @@ type
     Progress: TProgressBar;
     ProgressLabel: TLabel;
     StatusLabel: TLabel;
-    ButtonLayout: TLayout;
+    AdvButtonLayout: TLayout;
     RESnHighButton: TButton;
     RESnLowButton: TButton;
     ResetPulseButton: TButton;
-    LoadButton: TButton;
-    TransmitButton: TButton;
     XBeeInfoLabel: TLabel;
     XBeeInfo: TEdit;
     SerialIPGroupBox: TGroupBox;
@@ -54,6 +52,29 @@ type
     SetAPIwEsc: TRadioButton;
     SetConfigurationButton: TButton;
     AlwaysConfigure: TCheckBox;
+    ButtonLayout: TLayout;
+    OpenButton: TButton;
+    RAMButton: TButton;
+    EEPROMButton: TButton;
+    Line2: TLine;
+    Panel1: TPanel;
+    Panel2: TPanel;
+    ClockSpeedEdit: TEdit;
+    ClockSpeedLabel: TLabel;
+    ClockSpeedUnitLabel: TLabel;
+    InitialBaudEdit: TEdit;
+    InitialBaudLabel: TLabel;
+    FinalBaudEdit: TEdit;
+    FinalBaudLabel: TLabel;
+    SSSHTimeEdit: TEdit;
+    SSSHTimeLabel: TLabel;
+    SSSHTimeUnitLabel: TLabel;
+    SCLHighTimeEdit: TEdit;
+    SCLHighTimeLabel: TLabel;
+    Label2: TLabel;
+    SCLLowTimeEdit: TEdit;
+    SCLLowTimeLabel: TLabel;
+    Label4: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure PCPortComboChange(Sender: TObject);
@@ -63,14 +84,16 @@ type
     procedure RESnHighButtonClick(Sender: TObject);
     procedure RESnLowButtonClick(Sender: TObject);
     procedure ResetPulseButtonClick(Sender: TObject);
-    procedure LoadButtonClick(Sender: TObject);
-    procedure TransmitButtonClick(Sender: TObject);
+    procedure OpenButtonClick(Sender: TObject);
+    procedure RAMButtonClick(Sender: TObject);
+    procedure EEPROMButtonClick(Sender: TObject);
     procedure EnableIPChange(Sender: TObject);
     procedure EnableAPChange(Sender: TObject);
   private
     { Private declarations }
     procedure InitializeProgress(MaxIndex: Cardinal; AmendMaxIndex: Cardinal = 0);
     procedure UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
+    procedure Download(ToEEPROM: Boolean);
     procedure GenerateResetSignal(ShowProgress: Boolean = False);
     function  EnforceXBeeConfiguration(ShowProgress: Boolean = False; FinalizeProgress: Boolean = False): Boolean;
     procedure GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer);
@@ -93,6 +116,12 @@ var
   FBinSize           : Integer;          {The size of FBinImage (in longs)}
   IgnorePCPortChange : Boolean;          {PCPortChange processing flag}
   XBeeInfoList       : array of TXBee;   {Holds identification information for XBee Wi-Fi modules on network}
+  ClockSpeed         : Integer;          {System clock speed of target hardware; set by form's edit control}
+  InitialBaud        : Integer;          {Initial XBee-to-Propeller baud rate; set by form's edit control}
+  FinalBaud          : Integer;          {Final XBee-to-Propeller baud rate; set by form's edit control}
+  SSSHTime           : Single;           {Start/Stop Setup/Hold Time (in seconds); set by form's edit control}
+  SCLHighTime        : Single;           {Serial Clock High Time (in seconds); set by form's edit control}
+  SCLLowTime         : Single;           {Serial Clock Low Time (in seconds); set by form's edit control}
 
 const
   MinSerTimeout     = 100;
@@ -101,8 +130,6 @@ const
   CSumUnknown       = $FFFFFFFF;          {Unknown checksum value}
   ImageLimit        = 32768;              {Max size of Propeller Application image file}
 
-  InitialBaud       = 115200;             {Initial XBee-to-Propeller baud rate}
-  FinalBaud         = 921600; //460800;   {Final XBee-to-Propeller baud rate}
   DynamicWaitFactor = 2;                  {Multiply factor for dynamic waits; x times maximum round-trip time}
 
   {The RxHandshake array consists of 125 bytes encoded to represent the expected 250-bit (125-byte @ 2 bits/byte) response
@@ -165,9 +192,20 @@ begin
     XBee.RemoteIPAddr := PXB.IPAddr;
     XBee.RemoteSerialIPPort := PXB.IPPort;
     SendDebugMessage('Selected RemoteSerialIPPort: ' + XBee.RemoteSerialIPPort.ToString, True);
+    AlwaysConfigure.Enabled := True;
     SerialIPGroupBox.Enabled := True;
     SerialAPGroupBox.Enabled := True;
-    ButtonLayout.Enabled := True;
+    OpenButton.Enabled := True;
+    ClockSpeedEdit.Enabled := True;
+    InitialBaudEdit.Enabled := True;
+    FinalBaudEdit.Enabled := True;
+    SSSHTimeEdit.Enabled := True;
+    SCLHighTimeEdit.Enabled := True;
+    SCLLowTimeEdit.Enabled := True;
+    SetConfigurationButton.Enabled := True;
+    ResetPulseButton.Enabled := True;
+    RESnHighButton.Enabled := True;
+    RESnLowButton.Enabled := True;
     end
   else
     begin {Else, possibly "Advanced Options" selected}
@@ -178,9 +216,20 @@ begin
       XBeeInfo.Text := '';
       XBee.RemoteIPAddr := '';
       XBee.RemoteSerialIPPort := 0;
+      AlwaysConfigure.Enabled := False;
       SerialIPGroupBox.Enabled := False;
       SerialAPGroupBox.Enabled := False;
-      ButtonLayout.Enabled := False;
+      OpenButton.Enabled := False;
+      ClockSpeedEdit.Enabled := False;
+      InitialBaudEdit.Enabled := False;
+      FinalBaudEdit.Enabled := False;
+      SSSHTimeEdit.Enabled := False;
+      SCLHighTimeEdit.Enabled := False;
+      SCLLowTimeEdit.Enabled := False;
+      SetConfigurationButton.Enabled := False;
+      ResetPulseButton.Enabled := False;
+      RESnHighButton.Enabled := False;
+      RESnLowButton.Enabled := False;
       {Remove "None Found..." message, if any}
       if (PCPortCombo.Count = 2) and (PCPortCombo.ListItems[0].Tag = -1) then PCPortCombo.Items.Delete(0);
       {Reset combo box selection}
@@ -360,7 +409,7 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.LoadButtonClick(Sender: TObject);
+procedure TForm1.OpenButtonClick(Sender: TObject);
 var
   FStream     : TFileStream;
   ImageSize   : Integer;
@@ -480,13 +529,15 @@ begin
     FBinSize := ImageSize div 4;
     {Download image to Propeller chip (use VBase (word 4) value as the 'image long-count size')}
 //    Propeller.Download(Buffer, PWordArray(Buffer)[4] div 4, DownloadCmd);
-    TransmitButton.Enabled := True;
+    RAMButton.Enabled := True;
+    EEPROMButton.Enabled := True;
   except
     on E: EFileCorrupt do
       begin {Image corrupt, show error and exit}
 //      if (CPrefs[GUIDisplay].IValue in [0, 2]) then
 //        begin
-          TransmitButton.Enabled := False;
+          RAMButton.Enabled := False;
+          EEPROMButton.Enabled := False;
           ShowMessage(E.Message);
 //        ErrorMsg('052-'+E.Message);                     {Dialog display needed?  Show error.}
 //        end
@@ -503,7 +554,93 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
-procedure TForm1.TransmitButtonClick(Sender: TObject);
+procedure TForm1.RAMButtonClick(Sender: TObject);
+begin
+  Download(False);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.EEPROMButtonClick(Sender: TObject);
+begin
+  Download(True);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.EnableIPChange(Sender: TObject);
+begin
+  SetUDP.Enabled := EnableIP.IsChecked;
+  SetTCP.Enabled := EnableIP.IsChecked;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.EnableAPChange(Sender: TObject);
+begin
+  SetTransparent.Enabled := EnableAP.IsChecked;
+  SetAPI.Enabled := EnableAP.IsChecked;
+  SetAPIwEsc.Enabled := EnableAP.IsChecked;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+{----------------------------------------------------------------------------------------------------}
+{------------------------------------------ Private Methods -----------------------------------------}
+{----------------------------------------------------------------------------------------------------}
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.InitializeProgress(MaxIndex: Cardinal; AmendMaxIndex: Cardinal = 0);
+{Initialize Progress Bar to a range of 0..MaxIndex, or 0..<current max>+AmendMaxIndex}
+begin
+  if AmendMaxIndex = 0 then
+    begin
+    Progress.Value := 0;
+    Progress.Max := MaxIndex;
+    Progress.Tag := 0;
+    StatusLabel.Text := '';
+    UpdateProgress(0);
+    end
+  else
+    Progress.Max := Progress.Max + AmendMaxIndex;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
+{Update progress bar.
+Offset is +/- value to increment or decrement progress bar value.
+Status is an optional string to appear above progress bar.
+Show is an optional make progress bar visible / invisible indicator.}
+begin
+  if Offset > 0 then
+    begin
+    if Progress.Tag = 0 then
+      begin
+      Progress.Opacity := 1;
+      Progress.Value := Progress.Value + Offset;
+      end
+    else
+      Progress.Tag := Min(0, Progress.Tag + Offset);
+    end
+  else
+    begin
+    if Offset = Integer.MinValue then Offset := -Trunc(Progress.Value);
+    if Offset < 0 then
+      begin
+      Progress.Tag := Offset;
+      Progress.Opacity := 0.5;
+      end;
+    end;
+  if Status <> '' then StatusLabel.Text := Status;
+  Progress.Visible := Show;
+  Application.ProcessMessages;
+//    SendDebugMessage('Progress Updated: ' + Trunc(Progress.Value).ToString + ' of ' + Trunc(Progress.Max).ToString, True);
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.Download(ToEEPROM: Boolean);
+{Set ToEEPROM true to download to EEPROM (in addition to RAM).}
 var
   i                : Integer;
   r                : Byte;
@@ -530,9 +667,10 @@ const
    {----------------}
 
    function Long(Addr: TIdBytes): Cardinal;
-   {Returns four bytes starting at Addr as a single cardinal value (Long)}
+   {Returns cardinal value (Long) from four bytes starting at Addr.  Returns 0 if Addr is nil or is less than 4 bytes long.}
    begin
-     Result := (Addr[3] shl 24) + (Addr[2] shl 16) or (Addr[1] shl 8) or Addr[0];
+     Result := 0;
+     if assigned(Addr) then Result := (Addr[3] shl 24) or (Addr[2] shl 16) or (Addr[1] shl 8) or Addr[0];
    end;
 
    {----------------}
@@ -546,13 +684,16 @@ const
 
    {----------------}
 
-   function TransmitPacket(IgnoreResponse: Boolean = False): Integer;
+   function TransmitPacket(IgnoreResponse: Boolean = False; CustomTimeout: Integer = 0): Integer;
    {Transmit (and retransmit if necessary) the packet in TxBuf, waiting for response or timeout.
     Returns response value (if any), raises exception otherwise.
-    Set IgnoreResponse true to transmit only; ignoring any possible response.}
+    Set IgnoreResponse true to transmit only; ignoring any possible response.
+    Set CustomTimeout only to wait for an extended maximum timeout (in milliseconds); otherwise, TransmitPacket will
+    wait based on a DynamicSerTimeout that is a DynamicWaitFactor multiple of typical communication responses.}
    var
-     Retry : Integer;
-     Rnd   : Cardinal;
+     Retry   : Integer;
+     Rnd     : Cardinal;
+     Timeout : Integer;
    begin
      Retry := 3;
      repeat {(Re)Transmit packet}                                                                {Send application image packet, get acknowledgement, retransmit as necessary}
@@ -570,9 +711,14 @@ const
 
        SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Waiting for packet acknowledgement', True);
 
+       Timeout := DynamicSerTimeout+CustomTimeout;                                               {  Determine proper timeout; dynamic (typical) or extended custom (rare)}
        repeat                                                                                    {  Wait for positive/negative acknowledgement of this specific}
-         Acknowledged := not IgnoreResponse and XBee.ReceiveUDP(RxBuf, DynamicSerTimeout);       {  transmission, or timeout if none.  This loop throws out}
+         if Timeout > 5000 then
+           SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' Waiting custom delay ' + Timeout.ToString, True);
+         Acknowledged := not IgnoreResponse and XBee.ReceiveUDP(RxBuf, Timeout);                 {  transmission, or timeout if none.  This loop throws out}
        until not Acknowledged or ((Length(RxBuf) = 8) and (Long(@RxBuf[4]) = Long(@TxBuf[4])));  {  acknowledgements to previous transmissions, received late.}
+
+       SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' Received: ' + Long(@RxBuf[0]).ToString, True);
 
        Acknowledged := Acknowledged and (Long(@RxBuf[0]) <> Long(@TxBuf[0]));                    {  Amend Acknowledged flag with response's ACK/NAK status}
 
@@ -592,7 +738,8 @@ begin
   try {Handle download errors}
     if FBinSize = 0 then exit;
 
-    TransmitButton.Enabled := False;
+    RAMButton.Enabled := False;
+    EEPROMButton.Enabled := False;
 
     FVersionMode := False;
     FDownloadMode := 1; {The download command; 1 = write to RAM and run, 2 = write to EEPROM and stop, 3 = write to EEPROM and run}
@@ -600,7 +747,7 @@ begin
     try {Reserved Memory}
 
       STime := Ticks;
-  
+
       {Determine number of required packets for target application image; value becomes first Packet ID}
       SetRoundMode(rmUp);
       TotalPackets := Round(FBinSize*4 / (XBee.MaxDataSize-4*1));                                         {Calculate required number of packets for target image; binary image size (in bytes) / (max packet size - packet header)}
@@ -611,7 +758,7 @@ begin
       for i := 0 to high(InitCallFrame) do inc(Checksum, InitCallFrame[i]);
 
       {Initialize Progress Bar to proper size}
-      InitializeProgress(8 + TotalPackets);
+      InitializeProgress(8 + ord(ToEEPROM) + TotalPackets);
 
       {Begin download process}
       if not XBee.ConnectSerialUDP then
@@ -731,7 +878,20 @@ begin
         GenerateLoaderPacket(ltVerifyRAM, PacketID);                                             {Generate VerifyRAM executable packet}
         if TransmitPacket <> -Checksum then                                                      {Transmit packet (retransmit as necessary)}
           raise EHardDownload.Create('Error: RAM Checksum Failure!');                            {  Error if RAM Checksum differs}
-        PacketID := -Checksum;                                                                   {Ready next packet; ID's by checksum now }
+        PacketID := -Checksum;                                                                   {Ready next packet; ID's by -checksum now }
+
+        {Program EEPROM too?}
+        if ToEEPROM then
+          begin
+          SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Waiting for EEPROM programming', True);
+          UpdateProgress(+1, 'Programming EEPROM');
+
+          {Send Program/Verify EEPROM command}                                                   {Program and Verify EEPROM}
+          GenerateLoaderPacket(ltProgramEEPROM, PacketID);                                       {Generate ProgramEEPROM executable packet}
+          if TransmitPacket(False, 8000) <> -Checksum*2 then                                     {Transmit packet (retransmit as necessary)}
+            raise EHardDownload.Create('Error: EEPROM Programming Failure!');                    {  Error if EEPROM Checksum differs}
+          PacketID := -Checksum*2;                                                               {Ready next packet; ID's by -checksum*2 now }
+          end;
 
         SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Requesting Application Launch', True);
         UpdateProgress(+1, 'Requesting Application Launch');
@@ -759,82 +919,12 @@ begin
       IndySleep(500);
       UpdateProgress(0, '', False);
 
-      TransmitButton.Enabled := True;
+      RAMButton.Enabled := True;
+      EEPROMButton.Enabled := True;
     end;
   except {on - Handle download errors}
     on E:EDownload do ShowMessage(E.Message);
   end;
-end;
-
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.EnableIPChange(Sender: TObject);
-begin
-  SetUDP.Enabled := EnableIP.IsChecked;
-  SetTCP.Enabled := EnableIP.IsChecked;
-end;
-
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.EnableAPChange(Sender: TObject);
-begin
-  SetTransparent.Enabled := EnableAP.IsChecked;
-  SetAPI.Enabled := EnableAP.IsChecked;
-  SetAPIwEsc.Enabled := EnableAP.IsChecked;
-end;
-
-{----------------------------------------------------------------------------------------------------}
-{----------------------------------------------------------------------------------------------------}
-{------------------------------------------ Private Methods -----------------------------------------}
-{----------------------------------------------------------------------------------------------------}
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.InitializeProgress(MaxIndex: Cardinal; AmendMaxIndex: Cardinal = 0);
-{Initialize Progress Bar to a range of 0..MaxIndex, or 0..<current max>+AmendMaxIndex}
-begin
-  if AmendMaxIndex = 0 then
-    begin
-    Progress.Value := 0;
-    Progress.Max := MaxIndex;
-    Progress.Tag := 0;
-    StatusLabel.Text := '';
-    UpdateProgress(0);
-    end
-  else
-    Progress.Max := Progress.Max + AmendMaxIndex;
-end;
-
-{----------------------------------------------------------------------------------------------------}
-
-procedure TForm1.UpdateProgress(Offset: Integer; Status: String = ''; Show: Boolean = True);
-{Update progress bar.
-Offset is +/- value to increment or decrement progress bar value.
-Status is an optional string to appear above progress bar.
-Show is an optional make progress bar visible / invisible indicator.}
-begin
-  if Offset > 0 then
-    begin
-    if Progress.Tag = 0 then
-      begin
-      Progress.Opacity := 1;
-      Progress.Value := Progress.Value + Offset;
-      end
-    else
-      Progress.Tag := Min(0, Progress.Tag + Offset);
-    end
-  else
-    begin
-    if Offset = Integer.MinValue then Offset := -Trunc(Progress.Value);
-    if Offset < 0 then
-      begin
-      Progress.Tag := Offset;
-      Progress.Opacity := 0.5;
-      end;
-    end;
-  if Status <> '' then StatusLabel.Text := Status;
-  Progress.Visible := Show;
-  Application.ProcessMessages;
-//    SendDebugMessage('Progress Updated: ' + Trunc(Progress.Value).ToString + ' of ' + Trunc(Progress.Max).ToString, True);
 end;
 
 {----------------------------------------------------------------------------------------------------}
@@ -1126,26 +1216,26 @@ const
                                       $09,$00,$7C,$5C);
 
   {Loader ProgramVerifyEEPROM snippet}
-  ProgramVerifyEEPROM : array[0..311] of byte = ($4F,$EC,$BF,$68,$80,$14,$FD,$5C,$40,$BC,$FC,$A0,$45,$B8,$BC,$00,
-                                                 $9E,$5E,$FD,$5C,$77,$00,$70,$5C,$01,$8A,$FC,$80,$65,$BC,$FC,$E4,
-                                                 $8D,$3A,$FD,$5C,$49,$8A,$3C,$86,$63,$00,$54,$5C,$00,$8A,$FC,$A0,
-                                                 $49,$BC,$BC,$A0,$7B,$FE,$FC,$5C,$A1,$5E,$FD,$5C,$45,$BE,$BC,$00,
-                                                 $5C,$BE,$3C,$86,$77,$00,$54,$5C,$01,$8A,$FC,$80,$70,$BC,$FC,$E4,
-                                                 $02,$8C,$FC,$2C,$8D,$3A,$FD,$5C,$01,$8C,$FC,$28,$46,$B0,$BC,$A4,
-                                                 $09,$00,$7C,$5C,$80,$14,$FD,$5C,$A1,$B8,$FC,$A0,$8B,$5E,$FD,$5C,
-                                                 $77,$00,$70,$5C,$00,$00,$7C,$5C,$FF,$BB,$FC,$A0,$A0,$B8,$FC,$A0,
-                                                 $8B,$5E,$FD,$5C,$81,$BA,$F0,$E4,$45,$B8,$8C,$A0,$08,$B8,$CC,$28,
-                                                 $9E,$5E,$CD,$5C,$45,$B8,$8C,$A0,$9E,$5E,$CD,$5C,$77,$00,$70,$5C,
-                                                 $00,$00,$7C,$5C,$47,$8E,$3C,$62,$8E,$00,$7C,$5C,$47,$8E,$3C,$66,
-                                                 $09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,$4F,$E8,$BF,$64,
-                                                 $4E,$EC,$BF,$78,$55,$B6,$BC,$F8,$4F,$E8,$BF,$68,$F2,$9D,$3C,$61,
-                                                 $55,$B6,$BC,$F8,$4E,$EC,$BB,$7C,$00,$B6,$F8,$F8,$F2,$9D,$28,$61,
-                                                 $8F,$BE,$CC,$E4,$77,$00,$44,$5C,$79,$00,$48,$5C,$00,$00,$68,$5C,
-                                                 $01,$B8,$FC,$2C,$01,$B8,$FC,$68,$A2,$00,$7C,$5C,$FE,$B9,$FC,$A0,
-                                                 $09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,$4F,$E8,$BF,$64,
-                                                 $00,$B9,$7C,$62,$01,$B8,$FC,$34,$4E,$EC,$BF,$78,$56,$B6,$BC,$F8,
-                                                 $4F,$E8,$BF,$68,$F2,$9D,$3C,$61,$57,$B6,$BC,$F8,$A5,$BE,$FC,$E4,
-                                                 $FF,$B8,$FC,$60,$00,$00,$7C,$5C);
+  ProgramVerifyEEPROM : array[0..315] of byte = ($03,$8C,$FC,$2C,$4F,$EC,$BF,$68,$81,$16,$FD,$5C,$40,$BC,$FC,$A0,
+                                                 $45,$B8,$BC,$00,$9F,$60,$FD,$5C,$78,$00,$70,$5C,$01,$8A,$FC,$80,
+                                                 $66,$BC,$FC,$E4,$8E,$3C,$FD,$5C,$49,$8A,$3C,$86,$64,$00,$54,$5C,
+                                                 $00,$8A,$FC,$A0,$49,$BC,$BC,$A0,$7C,$00,$FD,$5C,$A2,$60,$FD,$5C,
+                                                 $45,$BE,$BC,$00,$5C,$BE,$3C,$86,$78,$00,$54,$5C,$01,$8A,$FC,$80,
+                                                 $71,$BC,$FC,$E4,$01,$8C,$FC,$28,$8E,$3C,$FD,$5C,$01,$8C,$FC,$28,
+                                                 $46,$B0,$BC,$A4,$09,$00,$7C,$5C,$81,$16,$FD,$5C,$A1,$B8,$FC,$A0,
+                                                 $8C,$60,$FD,$5C,$78,$00,$70,$5C,$00,$00,$7C,$5C,$FF,$BB,$FC,$A0,
+                                                 $A0,$B8,$FC,$A0,$8C,$60,$FD,$5C,$82,$BA,$F0,$E4,$45,$B8,$8C,$A0,
+                                                 $08,$B8,$CC,$28,$9F,$60,$CD,$5C,$45,$B8,$8C,$A0,$9F,$60,$CD,$5C,
+                                                 $78,$00,$70,$5C,$00,$00,$7C,$5C,$47,$8E,$3C,$62,$8F,$00,$7C,$5C,
+                                                 $47,$8E,$3C,$66,$09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,
+                                                 $4F,$E8,$BF,$64,$4E,$EC,$BF,$78,$55,$B6,$BC,$F8,$4F,$E8,$BF,$68,
+                                                 $F2,$9D,$3C,$61,$55,$B6,$BC,$F8,$4E,$EC,$BB,$7C,$00,$B6,$F8,$F8,
+                                                 $F2,$9D,$28,$61,$90,$BE,$CC,$E4,$78,$00,$44,$5C,$7A,$00,$48,$5C,
+                                                 $00,$00,$68,$5C,$01,$B8,$FC,$2C,$01,$B8,$FC,$68,$A3,$00,$7C,$5C,
+                                                 $FE,$B9,$FC,$A0,$09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,
+                                                 $4F,$E8,$BF,$64,$00,$B9,$7C,$62,$01,$B8,$FC,$34,$4E,$EC,$BF,$78,
+                                                 $56,$B6,$BC,$F8,$4F,$E8,$BF,$68,$F2,$9D,$3C,$61,$57,$B6,$BC,$F8,
+                                                 $A6,$BE,$FC,$E4,$FF,$B8,$FC,$60,$00,$00,$7C,$5C);
 
   {Loader LaunchStart snippet}
   LaunchStart : array[0..27] of byte = ($B8,$72,$FC,$58,$65,$72,$FC,$50,$09,$00,$7C,$5C,$06,$8A,$FC,$04,
@@ -1160,19 +1250,6 @@ const
 
 
   InitCallFrame : array [0..7] of byte = ($FF, $FF, $F9, $FF, $FF, $FF, $F9, $FF);
-
-//  {The TxHandshake array consists of 250 bytes representing the bit 0 values (0 or 1) of each of 250 iterations of the LFSR (seeded with ASCII 'P') described above.}
-{  TxHandshake : array[1..250] of byte = (0,1,0,1,1,1,0,0,1,1,1,1,0,1,0,1,1,1,1,1,0,0,0,1,1,1,0,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,0,0,1,0,0,1,0,1,1,1,1,0,0,1,0,0,0,1,0,0,0,
-                                         1,1,0,1,1,0,1,1,1,0,0,0,1,0,1,1,0,0,1,1,0,0,1,0,1,1,0,1,1,0,0,1,0,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,1,0,1,0,0,1,1,1,1,1,
-                                         1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,0,0,0,0,1,1,1,1,1,0,1,0,0,1,0,1,0,1,0,0,1,
-                                         0,0,0,0,0,1,0,0,0,0,1,1,1,0,1,1,1,1,1,1,0,1,1,0,0,0,0,1,1,0,0,0,1,0,0,1,1,0,0,0,0,0,1,1,0,1,0,0,0,1,0,1,0,0,1,1,0,1);
-}
-//  {The RxHandshake array consists of 250 bytes representing the bit 0 values (0 or 1) of each of 250 successive iterations of the LFSR of TxHandshake, above.}
-{  RxHandshake : array[1..250] of byte = (0,1,0,0,0,0,1,0,1,1,1,0,0,1,1,1,1,0,1,0,1,1,1,1,1,0,0,0,1,1,1,0,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,1,0,0,1,0,0,1,0,1,1,1,1,0,0,1,0,0,
-                                         0,1,0,0,0,1,1,0,1,1,0,1,1,1,0,0,0,1,0,1,1,0,0,1,1,0,0,1,0,1,1,0,1,1,0,0,1,0,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,1,0,1,0,0,
-                                         1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,0,0,0,0,1,1,1,1,1,0,1,0,0,1,0,1,
-                                         0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,1,1,0,1,1,1,1,1,1,0,1,1,0,0,0,0,1,1,0,0,0,1,0,0,1,1,0,0,0,0,0,1,1,0,1,0,0,0,1,0,1,0);
-}
 
     {----------------}
 
@@ -1189,6 +1266,13 @@ const
 begin
   if LoaderType = ltCore then
     begin {Generate specially-prepared stream of mini-loader's core (with handshake, timing templates, and host-initialized timing}
+    {Calculate timing metrics}
+    ClockSpeed := ClockSpeedEdit.Text.ToInteger;          {System clock speed of target hardware}
+    InitialBaud := InitialBaudEdit.Text.ToInteger;        {Initial XBee-to-Propeller baud rate}
+    FinalBaud := FinalBaudEdit.Text.ToInteger;            {Final XBee-to-Propeller baud rate}
+    SSSHTime := SSSHTimeEdit.Text.ToSingle;               {Start/Stop Setup/Hold Time (in seconds)}
+    SCLHighTime := SCLHighTimeEdit.Text.ToSingle;         {Serial Clock High Time (in seconds)}
+    SCLLowTime := SCLLowTimeEdit.Text.ToSingle;           {Serial Clock Low Time (in seconds)}
     {Reserve memory for Raw Loader Image}
     RawSize := (high(RawLoaderImage)+1) div 4;
     getmem(LoaderImage, RawSize*4+1);                                                                               {Reserve LoaderImage space for RawLoaderImage data plus 1 extra byte to accommodate generation routine}
@@ -1199,14 +1283,14 @@ begin
       {Clear checksum and set host-initialized values}
       LoaderImage[5] := 0;
       SetRoundMode(rmNearest);
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset, Round(80000000 / InitialBaud));                        {Initial Bit Time}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 4, Round(80000000 / FinalBaud));                      {Final Bit Time}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 8, Round(((1.5 * 80000000) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 12, 2 * 80000000 div (3 * 4));                        {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 16, Round(2 * 80000000 / FinalBaud * 10 / 12));       {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 20, Max(Round(80000000 * 0.0000006), 14));            {Minimum EEPROM Start/Stop Condition setup/hold time (1/0.6 µS); Minimum 14 cycles}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(80000000 * 0.0000006), 14));            {Minimum EEPROM SCL high time (1/0.6 µS); Minimum 14 cycles}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(80000000 * 0.0000013), 26));            {Minimum EEPROM SCL low time (1/1.3 µS); Minimum 26 cycles}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset, Round(ClockSpeed / InitialBaud));                      {Initial Bit Time}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 4, Round(ClockSpeed / FinalBaud));                    {Final Bit Time}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 8, Round(((1.5 * ClockSpeed) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 12, 2 * ClockSpeed div (3 * 4));                      {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 16, Round(2 * ClockSpeed / FinalBaud * 10 / 12));     {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 20, Max(Round(ClockSpeed * SSSHTime), 14));           {Minimum EEPROM Start/Stop Condition setup/hold time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(ClockSpeed * SCLHighTime), 14));        {Minimum EEPROM SCL high time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(ClockSpeed * SCLLowTime), 26));         {Minimum EEPROM SCL low time (400 KHz = 1/1.3 µS); Minimum 26 cycles}
       SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 32, PacketID);                                        {First Expected Packet ID; total packet count}
       {Recalculate and update checksum}
       Checksum := 0;

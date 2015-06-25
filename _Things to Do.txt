@@ -163,6 +163,8 @@ THINGS DONE
   * String issues in ParameterValue
   * Zero-termination of Parameter (when receiving)
 
+* Add EEPROM Programming feature
+
 
 THINGS TO PONDER
 ----------------
