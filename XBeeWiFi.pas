@@ -145,7 +145,7 @@ type
     function  GetItem(Command: xbCommand; var StrList: TSimpleStringList): Boolean; overload;              {Get list of string values}
     function  GetItem(Command: xbCommand; var Num: Cardinal): Boolean; overload;                           {Get numeric value}
     function  GetItem(Command: xbCommand; var NumList: TSimpleNumberList): Boolean; overload;              {Get list of numeric values}
-    function  SetItem(Command: xbCommand; Str: String): Boolean; overload;                                 {Set string value}
+    function  SetItem(Command: xbCommand; Str: ShortString): Boolean; overload;                            {Set string value}
     function  SetItem(Command: xbCommand; Num: Cardinal): Boolean; overload;                               {Set numeric value}
     {XBee UDP data methods}
     { TODO : Resolve TCP and UDP serial vs application names from interface perspective. }
@@ -173,7 +173,7 @@ type
   private
     { Private declarations }
     {XBee Application Service buffer transmit methods}
-    procedure PrepareAppBuffer(Command: xbCommand; ParamStr: String = ''; ParamNum: Int64 = -1; ParamData: TIdBytes = nil);
+    procedure PrepareAppBuffer(Command: xbCommand; ParamStr: ShortString = ''; ParamNum: Int64 = -1; ParamData: TIdBytes = nil);
     function  TransmitAppUDP(ExpectMultiple: Boolean = False; AutoRetry: Boolean = True): Boolean;
   end;
 
@@ -415,7 +415,7 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
-function TXBeeWiFi.SetItem(Command: xbCommand; Str: String): Boolean;
+function TXBeeWiFi.SetItem(Command: xbCommand; Str: ShortString): Boolean;
 {Set XBee attribute to string (Str) and return True if successful; False otherwise.
  This method sends a UDP packet over the XBee's Application Service and checks and validates the response (if any).}
 begin
@@ -638,7 +638,7 @@ end;
 {----------------------------------------------------------------------------------------------------}
 {----------------------------------------------------------------------------------------------------}
 
-procedure TXBeeWiFi.PrepareAppBuffer(Command: xbCommand; ParamStr: String = ''; ParamNum: Int64 = -1; ParamData: TIdBytes = nil);
+procedure TXBeeWiFi.PrepareAppBuffer(Command: xbCommand; ParamStr: ShortString = ''; ParamNum: Int64 = -1; ParamData: TIdBytes = nil);
 {Resize and fill TxBuf (pointed to by PTxBuf) with Command and Parameter (Str, Num, or Data).}
 var
   ParamLength : Cardinal;
@@ -681,7 +681,7 @@ begin
     end;
   if ParamLength > 0 then                                                             {If Parameter not empty}
     if Command in xbStrCommands then
-      Move(ParamStr, FPTxBuf.ParameterValue[0], ParamLength)                          {  append Parameter as a string}
+      Move(ParamStr[1], FPTxBuf.ParameterValue[0], ParamLength)                       {  append Parameter as a string}
     else
       if Command = xbData then
         Move(ParamData[0], FPTxBuf.FrameID, ParamLength)                              {  or as a data stream}
