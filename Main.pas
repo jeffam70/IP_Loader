@@ -271,8 +271,10 @@ begin
     begin {User clicked OK}
     Name := CustomizePort.NamePort.NewName.Text;                                {Get new name}
     if Trim(Name) = '' then Name := stringofchar(' ', 20);                      {If new name blank, fill with 20 spaces}
-    if not XBee.SetItem(xbNodeID, Name) then
+    if not XBee.SetItem(xbNodeID, Name) then                                    {Rename XBee}
       raise Exception.Create('Error: Unable to set module name!');
+    if not XBee.SaveItems then                                                  {Save persistently}
+      raise Exception.Create('Error: Unable to save settings!');
     XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag].PCPort := 'XB-'+Name;
     PCPortCombo.ListItems[PCPortCombo.ItemIndex].Text := 'XB-'+Name;
     PCPortCombo.Repaint;

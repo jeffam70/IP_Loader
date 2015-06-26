@@ -33,7 +33,6 @@ THINGS TO DO
 
 * Enhance to support multiple download target clock speeds
 * Test multiple target clock speeds
-* Give finer EEPROM progress updates
 * Review EEPROM code once more
 * Enhance to reset XBee settings at end of download
 * Add rigorous testing and logging feature
@@ -45,6 +44,13 @@ THINGS TO DO
   * Recording and restoring previous settings when done
     * This may be simpler with a single command, if there is one.
   * Resetting XBee I/O pin configuration to a disabled state after download?
+
+
+THINGS DEFERRED
+---------------
+
+* Give finer EEPROM progress updates - This can't be done practically unless using another thread, or unless rewriting Micro Boot Loader to feel progress
+  status along the way.
 
 
 THINGS DONE

@@ -24,7 +24,7 @@ type
   {IMPORTANT: Do not rearrange, append, or delete from this list without similarly modifying the ATCmd constant array}
   xbCommand = (xbData, xbMacHigh, xbMacLow, xbSSID, xbIPAddr, xbIPMask, xbIPGateway, xbIPPort, xbIPDestination, xbNodeID, xbMaxRFPayload, xbPacketingTimeout,
                xbIO2Mode, xbIO4Mode, xbOutputMask, xbOutputState, xbIO2Timer, xbIO4Timer, xbSerialMode, xbSerialBaud, xbSerialParity, xbSerialStopBits,
-               xbRTSFlow, xbSerialIP, xbFirmwareVer, xbHardwareVer, xbHardwareSeries, xbChecksum);
+               xbRTSFlow, xbSerialIP, xbFirmwareVer, xbHardwareVer, xbHardwareSeries, xbChecksum, xbSave);
 
 const
   {Define XBee WiFi's AT commands}
@@ -57,7 +57,8 @@ const
     {xbFirmwareVer}       Byte('V') + Byte('R') shl 8,  {[Rb] Firmware version.  Nibbles ABCD; ABC = major release, D = minor release.  B = 0 (standard release), B > 0 (variant release) (16-bits)}
     {xbHardwareVer}       Byte('H') + Byte('V') shl 8,  {[Rb] Hardware version.  Nibbles ABCD; AB = module type, CD = revision (16-bits)}
     {xbHardwareSeries}    Byte('H') + Byte('S') shl 8,  {[Rb] Hardware series. (16-bits?)}
-    {xbChecksum}          Byte('C') + Byte('K') shl 8   {[Rb] current configuration checksum (16-bits)}
+    {xbChecksum}          Byte('C') + Byte('K') shl 8,  {[Rb] current configuration checksum (16-bits)}
+    {xbSave}              Byte('W') + Byte('R') shl 8   {[R] Store attributes in non-volitile memory to make them persistent}
     );
 
   {Set of XBee Commands that take string parameters only (instead of numeric parameters)}
@@ -147,6 +148,8 @@ type
     function  GetItem(Command: xbCommand; var NumList: TSimpleNumberList): Boolean; overload;              {Get list of numeric values}
     function  SetItem(Command: xbCommand; Str: ShortString): Boolean; overload;                            {Set string value}
     function  SetItem(Command: xbCommand; Num: Cardinal): Boolean; overload;                               {Set numeric value}
+    function  SaveItems: Boolean;                                                                          {Save all attributes persistently}
+
     {XBee UDP data methods}
     { TODO : Resolve TCP and UDP serial vs application names from interface perspective. }
     function  ConnectSerialUDP: Boolean;                                                                   {Connect UDP channel to Serial Service}
@@ -435,6 +438,15 @@ end;
 
 {----------------------------------------------------------------------------------------------------}
 
+function TXBeeWiFi.SaveItems: Boolean;
+{Store XBee attributes to its non-volitile memory so they become persistent across resets}
+begin
+  PrepareAppBuffer(xbSave);                                                                                  {Prepare command packet}
+  Result := TransmitAppUDP;                                                                                  {and transmit it}
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
 function TXBeeWiFi.ConnectSerialUDP: Boolean;
 {Connect serial service UDP channel to already-set RemoteIP/RemoteIPPort metrics}
 begin
@@ -509,22 +521,6 @@ begin
   else                                                                                           {Else, break up into multiple timed packets}
     begin
     try
-
-//      PrevPacketSize := 1;                                                                       {  Prep for first packet}
-//      NextPacketSize := FMaxDataSize;
-//      Idx := -PrevPacketSize;
-//      FUDPRoundTrip := -1;
-//      while (Idx < 0) and (PrevPacketSize > 0) and Send(TempTxBuff) do                           {  Loop for all necessary packets}
-//        begin {While first packet not sent and latest packet sent and more to go}
-//        if Idx > -1 then sleep(Trunc(FMaxDataSize*0.30*10/115200*1000-FUDPRoundTrip));           {    Wait for 30% of "full data" to transmit out UART}
-//        inc(Idx, PrevPacketSize);                                                                {    Position for start of next packet}
-//        SetLength(TempTxBuff, NextPacketSize);                                                   {    Set proper packet size}
-//        Move(Data[Idx], TempTxBuff[0], NextPacketSize);                                          {    Prepare packet}
-//        PrevPacketSize := NextPacketSize;
-//        NextPacketSize := Min(Trunc(FMaxDataSize*0.30), Length(Data)-Idx-PrevPacketSize);        {    Ensure proper packet size for next time}
-//        end;
-//      Result := Idx+PrevPacketSize = Length(Data);                                               {  Return appropriate result}
-
       Idx := 0;                                                                                    {  Prep for first packet}
       PacketSize := FMaxDataSize;
       repeat                                                                                       {  Loop for all necessary packets}
@@ -645,26 +641,27 @@ var
   ParamValue  : Cardinal;
 begin
 { TODO : Make PrepareBuffer error out if Param data doesn't match command type }
+  ParamLength := 0;                                                                   {Clear Parameter Length}
   if Command in xbStrCommands then                                                    {If command is a string-type command}
     ParamLength := Length(ParamStr)                                                   {  note length in bytes/characters}
   else                                                                                {Else}
     if Command = xbData then                                                          {  If command is a data command}
       ParamLength := ifthen(assigned(ParamData), Length(ParamData), 0)                {    note length of data buffer}
     else                                                                              {  Else}
-      begin
-      ParamLength := 0;
-      if ParamNum > -1 then                                                           {    If number in range}
-        begin                                                                         {      note length in bytes of numeric value (1..4) and }
-        ParamValue := 0;                                                              {      rearrange for big-endian storage}
-        repeat
-          Inc(ParamLength);
-//          ParamLength := 2;
-          ParamValue := (ParamValue shl 8) + (ParamNum and $FF);
-          ParamNum := ParamNum shr 8;
-        until ParamNum = 0;
+      if Command <> xbSave then                                                       {    if normal command (not Save)}
+        begin
+        if ParamNum > -1 then                                                         {    If number in range}
+          begin                                                                       {      note length in bytes of numeric value (1..4) and }
+          ParamValue := 0;                                                            {      rearrange for big-endian storage}
+          repeat
+            Inc(ParamLength);
+            ParamValue := (ParamValue shl 8) + (ParamNum and $FF);
+            ParamNum := ParamNum shr 8;
+          until ParamNum = 0;
+          end;
         end;
-      end;
 { TODO : Protect against too big a data buffer (ParamData) }
+  {Build packet header}
   SetLength(FTxBuf, 8 + ord(Command <> xbData)*(1+1+2) + ParamLength);                {Size TxBuf for Application Header (8 bytes) plus (if not Data command; FrameID (1) and ConfigOptions (1) and ATCommand (2)),  plus ParameterValue (0+)}
   FPTxBuf := PxbTxPacket(@FTxBuf[0]);                                                 {Point PTxBuf at TxBuf}
   {FPTxBuf.Number1 := ?;                                                              This value will be set upon transmission}
@@ -673,12 +670,14 @@ begin
   FPTxBuf.EncryptionPad := 0;                                                         {EncryptionPad (always 0)}
   FPTxBuf.CommandID := ifthen(Command <> xbData, RemoteCommand, DataCommand);         {Set to be remote command or data command}
   FPTxBuf.CommandOptions := $02;                                                      {Set to request packet acknowledgement}
+  {Build packet intent}
   if Command <> xbData then                                                           {If not a data stream}
     begin
     FPTxBuf.FrameID := FrameID;                                                       {  Set Frame ID}
     FPTxBuf.ConfigOptions := ApplyCommand;                                            {  Set to apply the command}
     FPTxBuf.ATCommand := ATCmd[Command];                                              {  Set AT Command}
     end;
+  {Append Parameter Value(s); string, number, data, or nothing}
   if ParamLength > 0 then                                                             {If Parameter not empty}
     if Command in xbStrCommands then
       Move(ParamStr[1], FPTxBuf.ParameterValue[0], ParamLength)                       {  append Parameter as a string}
