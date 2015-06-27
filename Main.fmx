@@ -3,7 +3,7 @@ object Form1: TForm1
   Top = 0
   BorderStyle = Single
   Caption = 'Form1'
-  ClientHeight = 596
+  ClientHeight = 610
   ClientWidth = 427
   FormFactor.Width = 320
   FormFactor.Height = 480
@@ -132,7 +132,7 @@ object Form1: TForm1
   end
   object Panel1: TPanel
     Position.X = 16.000000000000000000
-    Position.Y = 384.000000000000000000
+    Position.Y = 400.000000000000000000
     Size.Width = 393.000000000000000000
     Size.Height = 193.000000000000000000
     Size.PlatformDefault = False
@@ -315,29 +315,31 @@ object Form1: TForm1
     Position.X = 16.000000000000000000
     Position.Y = 200.000000000000000000
     Size.Width = 393.000000000000000000
-    Size.Height = 169.000000000000000000
+    Size.Height = 185.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 8
-    object ClockSpeedEdit: TEdit
+    object XtalFreqEdit: TEdit
       Touch.InteractiveGestures = [LongTap, DoubleTap]
-      TabOrder = 6
-      Text = '80000000'
-      Position.X = 112.000000000000000000
-      Position.Y = 8.000000000000000000
+      TabOrder = 8
+      Text = '5000000'
+      Position.X = 80.000000000000000000
+      Position.Y = 24.000000000000000000
       Enabled = False
-      Size.Width = 73.000000000000000000
+      Size.Width = 65.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
-      object ClockSpeedLabel: TLabel
-        Position.X = -78.000000000000000000
+      OnChangeTracking = UpdateClockSpeed
+      OnValidating = XtalFreqEditValidating
+      object XtalFreqLabel: TLabel
+        Position.X = -54.000000000000000000
         Position.Y = 2.000000000000000000
         Size.Width = 79.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Clock Speed:'
+        Text = 'Xtal Freq:'
       end
       object ClockSpeedUnitLabel: TLabel
-        Position.X = 78.000000000000000000
+        Position.X = 70.000000000000000000
         Position.Y = 2.000000000000000000
         Size.Width = 41.000000000000000000
         Size.Height = 17.000000000000000000
@@ -347,12 +349,12 @@ object Form1: TForm1
     end
     object InitialBaudEdit: TEdit
       Touch.InteractiveGestures = [LongTap, DoubleTap]
-      TabOrder = 2
+      TabOrder = 3
       Text = '115200'
-      Position.X = 112.000000000000000000
-      Position.Y = 40.000000000000000000
+      Position.X = 312.000000000000000000
+      Position.Y = 26.000000000000000000
       Enabled = False
-      Size.Width = 73.000000000000000000
+      Size.Width = 57.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
       object InitialBaudLabel: TLabel
@@ -368,10 +370,10 @@ object Form1: TForm1
       Touch.InteractiveGestures = [LongTap, DoubleTap]
       TabOrder = 1
       Text = '921600'
-      Position.X = 280.000000000000000000
-      Position.Y = 40.000000000000000000
+      Position.X = 312.000000000000000000
+      Position.Y = 50.000000000000000000
       Enabled = False
-      Size.Width = 73.000000000000000000
+      Size.Width = 57.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
       object FinalBaudLabel: TLabel
@@ -385,21 +387,21 @@ object Form1: TForm1
     end
     object SSSHTimeEdit: TEdit
       Touch.InteractiveGestures = [LongTap, DoubleTap]
-      TabOrder = 5
+      TabOrder = 6
       Text = '0.0000006'
-      Position.X = 200.000000000000000000
-      Position.Y = 72.000000000000000000
+      Position.X = 96.000000000000000000
+      Position.Y = 128.000000000000000000
       Enabled = False
       Size.Width = 73.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
       object SSSHTimeLabel: TLabel
-        Position.X = -166.000000000000000000
+        Position.X = -70.000000000000000000
         Position.Y = 2.000000000000000000
-        Size.Width = 159.000000000000000000
+        Size.Width = 71.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Start/Stop Setup/Hold Time:'
+        Text = 'Setup/Hold:'
       end
       object SSSHTimeUnitLabel: TLabel
         Position.X = 78.000000000000000000
@@ -407,26 +409,26 @@ object Form1: TForm1
         Size.Width = 59.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Seconds'
+        Text = 'Sec'
       end
     end
     object SCLHighTimeEdit: TEdit
       Touch.InteractiveGestures = [LongTap, DoubleTap]
-      TabOrder = 4
+      TabOrder = 5
       Text = '0.0000006'
-      Position.X = 200.000000000000000000
-      Position.Y = 104.000000000000000000
+      Position.X = 280.000000000000000000
+      Position.Y = 128.000000000000000000
       Enabled = False
       Size.Width = 73.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
       object SCLHighTimeLabel: TLabel
-        Position.X = -166.000000000000000000
+        Position.X = -46.000000000000000000
         Position.Y = 2.000000000000000000
-        Size.Width = 159.000000000000000000
+        Size.Width = 47.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Serial Clock High Time:'
+        Text = 'High:'
       end
       object Label2: TLabel
         Position.X = 78.000000000000000000
@@ -434,26 +436,26 @@ object Form1: TForm1
         Size.Width = 59.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Seconds'
+        Text = 'Sec'
       end
     end
     object SCLLowTimeEdit: TEdit
       Touch.InteractiveGestures = [LongTap, DoubleTap]
-      TabOrder = 3
+      TabOrder = 4
       Text = '0.0000013'
-      Position.X = 200.000000000000000000
-      Position.Y = 136.000000000000000000
+      Position.X = 280.000000000000000000
+      Position.Y = 152.000000000000000000
       Enabled = False
       Size.Width = 73.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
       object SCLLowTimeLabel: TLabel
-        Position.X = -166.000000000000000000
+        Position.X = -46.000000000000000000
         Position.Y = 2.000000000000000000
-        Size.Width = 159.000000000000000000
+        Size.Width = 47.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Serial Clock Low Time:'
+        Text = 'Low:'
       end
       object Label4: TLabel
         Position.X = 78.000000000000000000
@@ -461,7 +463,80 @@ object Form1: TForm1
         Size.Width = 59.000000000000000000
         Size.Height = 17.000000000000000000
         Size.PlatformDefault = False
-        Text = 'Seconds'
+        Text = 'Sec'
+      end
+    end
+    object ClockModeCombo: TComboBox
+      DisableFocusEffect = False
+      Enabled = False
+      Items.Strings = (
+        'XTAL1+PLL1X'
+        'XTAL1+PLL2X'
+        'XTAL1+PLL4X'
+        'XTAL1+PLL8X'
+        'XTAL1+PLL16X')
+      ItemIndex = 4
+      Position.X = 81.000000000000000000
+      Position.Y = 49.000000000000000000
+      Size.Width = 112.000000000000000000
+      Size.Height = 20.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 2
+      OnChange = UpdateClockSpeed
+      object ClockModeLabel: TLabel
+        Position.X = -40.000000000000000000
+        Position.Y = 2.000000000000000000
+        Size.Width = 41.000000000000000000
+        Size.Height = 17.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Mode:'
+      end
+    end
+    object I2CStartStopLabel: TLabel
+      Position.X = 16.000000000000000000
+      Position.Y = 110.000000000000000000
+      Text = 'I2C Start/Stop'
+    end
+    object I2CSCLLabel: TLabel
+      Position.X = 224.000000000000000000
+      Position.Y = 108.000000000000000000
+      Text = 'I2C SCL'
+    end
+    object SerialLabel: TLabel
+      Position.X = 222.000000000000000000
+      Position.Y = 8.000000000000000000
+      Text = 'Asynch Serial'
+    end
+    object ClockLabel: TLabel
+      Position.X = 16.000000000000000000
+      Position.Y = 8.000000000000000000
+      Text = 'Clock'
+    end
+    object ClockSpeedEdit: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 7
+      Text = '80000000'
+      Position.X = 80.000000000000000000
+      Position.Y = 72.000000000000000000
+      Enabled = False
+      Size.Width = 65.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      object ClockSpeedLabel: TLabel
+        Position.X = -41.000000000000000000
+        Position.Y = 2.000000000000000000
+        Size.Width = 47.000000000000000000
+        Size.Height = 17.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Speed:'
+      end
+      object Label3: TLabel
+        Position.X = 70.000000000000000000
+        Position.Y = 2.000000000000000000
+        Size.Width = 41.000000000000000000
+        Size.Height = 17.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Hz'
       end
     end
   end

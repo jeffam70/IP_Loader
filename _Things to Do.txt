@@ -29,9 +29,6 @@ THINGS TO DO
   * Loader Image
     * Should support initial and target 9,600/19,200/38,400/57,600/115,200/230,400/460,800/921,600/1,000,000/1,500,000/2,000,000/3,000,000 baud rates
 
-      * Loader acknowledges EEPROM write
-
-* Enhance to support multiple download target clock speeds
 * Test multiple target clock speeds
 * Review EEPROM code once more
 * Enhance to reset XBee settings at end of download
@@ -137,6 +134,7 @@ THINGS DONE
         * Loader "may" negatively acknowlege packet and request previous packet (if UDP does't dump corrupted packets; ie: a corrupted acknowledge from before)
           * Host retransmits requested packet if necessary
       * Loader acknowledges Application Image (positively or negatively); this is a RAM Checksum response
+      * Loader acknowledges EEPROM write
   * Add EEPROM Programming feature
 
 
@@ -180,6 +178,7 @@ THINGS DONE
 * Sort-of fixed list drop down problem
 * Enhance to show XBee port's Name attribute properly
 * Enhance to configure XBee's Name attribute
+* Enhance to support multiple download target clock speeds
 
 
 
