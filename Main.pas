@@ -101,7 +101,7 @@ type
     procedure Download(ToEEPROM: Boolean);
     procedure GenerateResetSignal(ShowProgress: Boolean = False);
     function  EnforceXBeeConfiguration(ShowProgress: Boolean = False; FinalizeProgress: Boolean = False): Boolean;
-    procedure GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer);
+    procedure GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer; ClockSpeed: Integer = 0; ClockMode: Byte = 0);
   public
     { Public declarations }
   end;
@@ -121,7 +121,6 @@ var
   FBinSize           : Integer;          {The size of FBinImage (in longs)}
   IgnorePCPortChange : Boolean;          {PCPortChange processing flag}
   XBeeInfoList       : array of TXBee;   {Holds identification information for XBee Wi-Fi modules on network}
-  ClockSpeed         : Integer;          {System clock speed of target hardware; set by form's edit control}
   InitialBaud        : Integer;          {Initial XBee-to-Propeller baud rate; set by form's edit control}
   FinalBaud          : Integer;          {Final XBee-to-Propeller baud rate; set by form's edit control}
   SSSHTime           : Single;           {Start/Stop Setup/Hold Time (in seconds); set by form's edit control}
@@ -609,7 +608,7 @@ var
                   if ComboIdx > -1 then
                     begin
                     SendDebugMessage('PCPortCombo Length: ' + PCPortCombo.Count.ToString, True);
-                    SendDebugMessage('Obj Address: ' + PCPortCombo.ListItems[ComboIdx].Tag.ToString, True);
+                    SendDebugMessage('Obj Address: ' + Integer(PCPortCombo.ListItems[ComboIdx].Tag).ToString, True);
                     SendDebugMessage('Obj IPAddr: ' + XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr, True);
                     end;
                   if (ComboIdx = -1) or (XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr <> PXB.IPAddr) then    {Add only unique XBee modules found; ignore duplicates}
@@ -818,7 +817,7 @@ begin
           UpdateProgress(pReset);
 
           {Generate initial packet (handshake, timing templates, and Propeller Loader's Download Stream) all stored in TxBuf}
-          GenerateLoaderPacket(ltCore, TotalPackets);
+          GenerateLoaderPacket(ltCore, TotalPackets, (FBinImage[3] shl 24)+(FBinImage[2] shl 16)+(FBinImage[1] shl 8)+FBinImage[0], FBinImage[4]);
 
           SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Connecting...', True);
 
@@ -1086,21 +1085,31 @@ end;
 
 {--------------------------------------------------------------------------------}
 
-procedure TForm1.GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer);
-{Generate a single packet (in TxBuf) that contains the mini-loader (IP_Loader.spin) according to LoaderType.
- Initially, LoaderType should be ltCore, followed by other types as needed.
+procedure TForm1.GenerateLoaderPacket(LoaderType: TLoaderType; PacketID: Integer; ClockSpeed: Integer = 0; ClockMode: Byte = 0);
+{Generate a single packet (in TxBuf) that contains a portion of the Micro Boot Loader (IP_Loader.spin) according to LoaderType, ClockSpeed
+ and ClockMode.
+
+ Initial call should request LoaderType of ltCore, PacketID equal to target application's packet count, and a ClockSpeed and ClockMode
+ optionally equal to target application's system clock frequency and clock mode.  Later calls should request other LoaderTypes with the
+ actual PacketID of the pacekt the loader portion will be delivered inside of and omitting the ClockSpeed and ClockMode.
+
  If LoaderType is ltCore...
    * target application's total packet count must be included in PacketID.
+   * target application's system clock speed must be included in ClockSpeed.
+   * target application's system clock mode must be included in ClockMode.
    * generated packet contains the Propeller handshake, timing templates, and core code from the Propeller Loader Image (IP_Loader.spin),
      encoded in an optimized format (3, 4, or 5 bits per byte; 7 to 11 bytes per long).
-     Note: optimal encoding means, for every 5 contiguous bits in Propeller Application Image (LSB first) 3, 4, or 5 bits can be translated to a byte.
-           The process requires 5 bits input (ie: indexed into the PDSTx array) and gets a byte out that contains the first 3, 4, or 5 bits encoded
-           in the Propeller Download stream format. The 2nd dimention of the PDSTx array contains the number of bits acutally encoded.  If less than
-           5 bits were translated, the remaining bits lead the next 5-bit translation unit input to the translation process.
+     Note: optimal encoding means, for every 5 contiguous bits in Propeller Application Image (LSB first) 3, 4, or 5 bits can be translated
+           to a byte.  The process requires 5 bits input (ie: indexed into the PDSTx array) and gets a byte out that contains the first 3,
+           4, or 5 bits encoded in the Propeller Download stream format. The 2nd dimention of the PDSTx array contains the number of bits
+           acutally encoded.  If less than 5 bits were translated, the remaining bits lead the next 5-bit translation unit input to the
+           translation process.
  If LoaderType is not ltCore...
-   * PacketIDs should be less than 0 for this type of packet in order to work with the mini-loader core.
-   * generated packet is a snippet of loader code aligned to be executable from the Core's packet buffer.  This snippet is in raw form (it is not
-     encoded) and should be transmitted as such.}
+   * PacketIDs should be less than 0 for this type of packet in order to work with the Micro Boot Loader core.
+   * ClockSpeed and ClockMode can be omitted.
+   * generated packet is a snippet of loader code aligned to be executable from inside the Core's packet buffer.  This snippet is in raw form
+    (it is not encoded) and should be transmitted as such.}
+
 var
   Idx              : Integer;      {General index value}
   BValue           : Byte;         {Binary Value to translate}
@@ -1298,7 +1307,7 @@ const
 
     {----------------}
 
-    procedure SetHostInitializedValue(Addr: Integer; Value: Integer);
+    procedure PatchLoaderLongValue(Addr: Integer; Value: Integer);
     {Adjust LoaderImage to contain Value (long) at Addr}
     var
       Idx : Integer;
@@ -1310,9 +1319,8 @@ const
 
 begin
   if LoaderType = ltCore then
-    begin {Generate specially-prepared stream of mini-loader's core (with handshake, timing templates, and host-initialized timing}
+    begin {Generate specially-prepared stream of Micro Boot Loader's core (with handshake, timing templates, and host-initialized timing}
     {Calculate timing metrics}
-    ClockSpeed := ClockSpeedEdit.Text.ToInteger;          {System clock speed of target hardware}
     InitialBaud := InitialBaudEdit.Text.ToInteger;        {Initial XBee-to-Propeller baud rate}
     FinalBaud := FinalBaudEdit.Text.ToInteger;            {Final XBee-to-Propeller baud rate}
     SSSHTime := SSSHTimeEdit.Text.ToSingle;               {Start/Stop Setup/Hold Time (in seconds)}
@@ -1323,22 +1331,23 @@ begin
     getmem(LoaderImage, RawSize*4+1);                                                                               {Reserve LoaderImage space for RawLoaderImage data plus 1 extra byte to accommodate generation routine}
     getmem(LoaderStream, RawSize*4 * 11);                                                                           {Reserve LoaderStream space for maximum-sized download stream}
     try {Reserved memory}
-      {Prepare Loader Image}
+      {Prepare Loader Image with patched clock metrics and host-initialized values}
       Move(RawLoaderImage, LoaderImage[0], RawSize*4);                                                              {Copy raw loader image to LoaderImage (for adjustments and processing)}
-      {Clear checksum and set host-initialized values}
-      LoaderImage[5] := 0;
+      PatchLoaderLongValue(0, ClockSpeed);                                                                          {Set system clock speed}
+      LoaderImage[4] := ClockMode;                                                                                  {Set system clock mode}
       SetRoundMode(rmNearest);
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset, Round(ClockSpeed / InitialBaud));                      {Initial Bit Time}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 4, Round(ClockSpeed / FinalBaud));                    {Final Bit Time}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 8, Round(((1.5 * ClockSpeed) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 12, 2 * ClockSpeed div (3 * 4));                      {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 16, Round(2 * ClockSpeed / FinalBaud * 10 / 12));     {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 20, Max(Round(ClockSpeed * SSSHTime), 14));           {Minimum EEPROM Start/Stop Condition setup/hold time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(ClockSpeed * SCLHighTime), 14));        {Minimum EEPROM SCL high time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(ClockSpeed * SCLLowTime), 26));         {Minimum EEPROM SCL low time (400 KHz = 1/1.3 µS); Minimum 26 cycles}
-      SetHostInitializedValue(RawSize*4+RawLoaderInitOffset + 32, PacketID);                                        {First Expected Packet ID; total packet count}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset, Round(ClockSpeed / InitialBaud));                         {Initial Bit Time}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 4, Round(ClockSpeed / FinalBaud));                       {Final Bit Time}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 8, Round(((1.5 * ClockSpeed) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 12, 2 * ClockSpeed div (3 * 4));                         {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 16, Round(2 * ClockSpeed / FinalBaud * 10 / 12));        {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 20, Max(Round(ClockSpeed * SSSHTime), 14));              {Minimum EEPROM Start/Stop Condition setup/hold time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(ClockSpeed * SCLHighTime), 14));           {Minimum EEPROM SCL high time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(ClockSpeed * SCLLowTime), 26));            {Minimum EEPROM SCL low time (400 KHz = 1/1.3 µS); Minimum 26 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 32, PacketID);                                           {First Expected Packet ID; total packet count}
       {Recalculate and update checksum}
-      Checksum := 0;
+      Checksum := 0;                                                                                                {Clear checksum}
+      LoaderImage[5] := Checksum;
       for Idx := 0 to RawSize*4-1 do inc(Checksum, LoaderImage[Idx]);
       for Idx := 0 to high(InitCallFrame) do inc(Checksum, InitCallFrame[Idx]);
       LoaderImage[5] := 256-(CheckSum and $FF);                                                                     {Update loader image so low byte of checksum calculates to 0}
@@ -1346,7 +1355,6 @@ begin
       BCount := 0;
       LoaderStreamSize := 0;
       while BCount < (RawSize*4) * 8 do                                                                             {For all bits in data stream...}
-//      while BCount < ((RawSize*4) * 8) div 3 do                                                                             {For all bits in data stream...}
         begin
           BitsIn := Min(5, (RawSize*4) * 8 - BCount);                                                               {  Determine number of bits in current unit to translate; usually 5 bits}
           BValue := ( (LoaderImage[BCount div 8] shr (BCount mod 8)) +                                              {  Extract next translation unit (contiguous bits, LSB first; usually 5 bits)}
@@ -1355,7 +1363,6 @@ begin
           inc(LoaderStreamSize);                                                                                    {  Increment byte index}
           inc(BCount, PDSTx[BValue, BitsIn, dtBits]);                                                               {  Increment bit index (usually 3, 4, or 5 bits, but can be 1 or 2 at end of stream)}
         end;
-//exit;
       {Prepare loader packet; contains handshake and Loader Stream.}
       SetLength(TxBuf, Length(TxHandshake)+11+LoaderStreamSize);                                                    {Set packet size}
 
