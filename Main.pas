@@ -61,8 +61,8 @@ type
     Line2: TLine;
     Panel1: TPanel;
     Panel2: TPanel;
-    ClockSpeedEdit: TEdit;
-    ClockSpeedLabel: TLabel;
+    XtalFreqEdit: TEdit;
+    XtalFreqLabel: TLabel;
     ClockSpeedUnitLabel: TLabel;
     InitialBaudEdit: TEdit;
     InitialBaudLabel: TLabel;
@@ -78,11 +78,22 @@ type
     SCLLowTimeLabel: TLabel;
     Label4: TLabel;
     NamePort: TButton;
+    ClockModeCombo: TComboBox;
+    ClockModeLabel: TLabel;
+    I2CStartStopLabel: TLabel;
+    I2CSCLLabel: TLabel;
+    SerialLabel: TLabel;
+    ClockLabel: TLabel;
+    ClockSpeedEdit: TEdit;
+    ClockSpeedLabel: TLabel;
+    Label3: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure PCPortComboChange(Sender: TObject);
     procedure FindPortsButtonClick(Sender: TObject);
     procedure NamePortClick(Sender: TObject);
+    procedure XtalFreqEditValidating(Sender: TObject; var Text: string);
+    procedure UpdateClockSpeed(Sender: TObject);
     procedure ConfigurationChange(Sender: TObject);
     procedure SetConfigurationButtonClick(Sender: TObject);
     procedure RESnHighButtonClick(Sender: TObject);
@@ -148,9 +159,10 @@ const
                                          $EF,$CE,$EE,$CE,$EF,$CE,$CE,$EE,$CF,$CF,$CE,$CF,$CF);
 
   {Call frame}
-  InitCallFrame     : array [0..7] of byte = ($FF, $FF, $F9, $FF, $FF, $FF, $F9, $FF); {See ValidateImageDataIntegrity for info on InitCallFrame}
+  InitCallFrame  : array[0..7] of byte = ($FF, $FF, $F9, $FF, $FF, $FF, $F9, $FF); {See ValidateImageDataIntegrity for info on InitCallFrame}
 
-
+  {Clock Mode}
+  ClockModeValue : array[0..4] of byte = ($6B, $6C, $6D, $6E, $6F);
 
 implementation
 
@@ -201,10 +213,15 @@ begin
     SerialIPGroupBox.Enabled := True;
     SerialAPGroupBox.Enabled := True;
     OpenButton.Enabled := True;
-    ClockSpeedEdit.Enabled := True;
+    ClockLabel.Enabled := True;
+    XtalFreqEdit.Enabled := True;
+    ClockModeCombo.Enabled := True;
+    SerialLabel.Enabled := True;
     InitialBaudEdit.Enabled := True;
     FinalBaudEdit.Enabled := True;
+    I2CStartStopLabel.Enabled := True;
     SSSHTimeEdit.Enabled := True;
+    I2CSCLLabel.Enabled := True;
     SCLHighTimeEdit.Enabled := True;
     SCLLowTimeEdit.Enabled := True;
     SetConfigurationButton.Enabled := True;
@@ -226,9 +243,14 @@ begin
       SerialIPGroupBox.Enabled := False;
       SerialAPGroupBox.Enabled := False;
       OpenButton.Enabled := False;
-      ClockSpeedEdit.Enabled := False;
+      ClockLabel.Enabled := False;
+      SerialLabel.Enabled := False;
+      XtalFreqEdit.Enabled := False;
+      ClockModeCombo.Enabled := False;
       InitialBaudEdit.Enabled := False;
       FinalBaudEdit.Enabled := False;
+      I2CStartStopLabel.Enabled := False;
+      I2CSCLLabel.Enabled := False;
       SSSHTimeEdit.Enabled := False;
       SCLHighTimeEdit.Enabled := False;
       SCLLowTimeEdit.Enabled := False;
@@ -281,6 +303,35 @@ begin
   except
     on E:Exception do ShowMessage(E.Message);
   end;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.XtalFreqEditValidating(Sender: TObject; var Text: string);
+{Allow only numbers in the XtalFreq field}
+var
+  Idx : Integer;
+const
+  IllegalChars : array of Char = [' ','!','"','#','$','%','&','''','(',')','*','+',',','-','.','/',':',';','<','=','>','?',
+                                  '@','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','[','\',']','^','_',
+                                  '`','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','{','|','}','~','',
+                                  ' ','¡','¢','£','¤','¥','¦','§','¨','©','ª','«','¬','­','®','¯','°','±','²','³','´','µ','¶','·','¸','¹','º','»','¼','½','¾','¿',
+                                  'À','Á','Â','Ã','Ä','Å','Æ','Ç','È','É','Ê','Ë','Ì','Í','Î','Ï','Ð','Ñ','Ò','Ó','Ô','Õ','Ö','×','Ø','Ù','Ú','Û','Ü','Ý','Þ','ß',
+                                  'à','á','â','ã','ä','å','æ','ç','è','é','ê','ë','ì','í','î','ï','ð','ñ','ò','ó','ô','õ','ö','÷','ø','ù','ú','û','ü','ý','þ','8'];
+begin
+  {Strip any illegal characters from the field}
+  repeat
+    Idx := Text.IndexOfAny(IllegalChars);
+    Text := Text.Remove(Idx, 1);
+  until Idx = -1;
+end;
+
+{----------------------------------------------------------------------------------------------------}
+
+procedure TForm1.UpdateClockSpeed(Sender: TObject);
+{Update clock speed display}
+begin
+  ClockSpeedEdit.Text := (XtalFreqEdit.Text.ToInteger*Trunc(Power(2, ClockModeCombo.ItemIndex))).ToString;
 end;
 
 {----------------------------------------------------------------------------------------------------}
@@ -817,8 +868,8 @@ begin
           UpdateProgress(pReset);
 
           {Generate initial packet (handshake, timing templates, and Propeller Loader's Download Stream) all stored in TxBuf}
-          GenerateLoaderPacket(ltCore, TotalPackets, (FBinImage[3] shl 24)+(FBinImage[2] shl 16)+(FBinImage[1] shl 8)+FBinImage[0], FBinImage[4]);
-
+          GenerateLoaderPacket(ltCore, TotalPackets, ClockSpeedEdit.Text.ToInteger, ClockModeValue[ClockModeCombo.ItemIndex]);
+//          GenerateLoaderPacket(ltCore, TotalPackets, (FBinImage[3] shl 24)+(FBinImage[2] shl 16)+(FBinImage[1] shl 8)+FBinImage[0], FBinImage[4]);
           SendDebugMessage('+' + GetTickDiff(STime, Ticks).ToString + ' - Connecting...', True);
 
           try {Connecting...}
