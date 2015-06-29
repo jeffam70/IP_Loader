@@ -13,7 +13,7 @@ uses
   Debug;
 
 type
-  TLoaderType = (ltCore, ltVerifyRAM, ltProgramEEPROM, ltLaunchStart, ltLaunchFinal);
+  TLoaderType = (ltCore, ltVerifyRAM, ltProgramEEPROM, ltReadyToLaunch, ltLaunchNow);
 
 
   {Define XBee Info record}
@@ -992,7 +992,7 @@ begin
         UpdateProgress(+1, 'Requesting Application Launch');
 
         {Send verified/launch command}                                                           {Verified/Launch}
-        GenerateLoaderPacket(ltLaunchStart, PacketID);                                           {Generate LaunchStart executable packet}
+        GenerateLoaderPacket(ltReadyToLaunch, PacketID);                                         {Generate ReadyToLaunch executable packet}
         if TransmitPacket <> PacketID-1 then                                                     {Transmit packet (Launch step 1); retransmit as necessary}
           raise EHardDownload.Create('Error: communication failed!');                            {  Error if unexpected response}
         dec(PacketID);                                                                           {Ready next packet}
@@ -1001,7 +1001,7 @@ begin
         UpdateProgress(+1, 'Application Launching');
 
         {Send launch command}                                                                    {Verified}
-        GenerateLoaderPacket(ltLaunchFinal, PacketID);                                           {Generate LaunchFinal executable packet}
+        GenerateLoaderPacket(ltLaunchNow, PacketID);                                             {Generate LaunchNow executable packet}
         TransmitPacket(True);                                                                    {Transmit last packet (Launch step 2) only once (no retransmission); ignoring any response}
         UpdateProgress(+1, 'Success');
 
@@ -1275,31 +1275,31 @@ const
   This memory image isn't used as-is; before download, it is first adjusted to contain special values assigned by this host (communication timing and
   synchronization values) and then is translated into an optimized Propeller Download Stream understandable by the Propeller ROM-based boot loader.}
 
-  RawLoaderImage : array[0..387] of byte = ($00,$B4,$C4,$04,$6F,$67,$10,$00,$84,$01,$8C,$01,$7C,$01,$90,$01,
-                                            $74,$01,$02,$00,$6C,$01,$00,$00,$4D,$E8,$BF,$A0,$4D,$EC,$BF,$A0,
-                                            $50,$B6,$BC,$A1,$01,$B6,$FC,$28,$F1,$B7,$BC,$80,$A0,$B4,$CC,$A0,
-                                            $50,$B6,$BC,$F8,$F2,$99,$3C,$61,$05,$B4,$FC,$E4,$58,$24,$FC,$54,
-                                            $61,$B2,$BC,$A0,$02,$BA,$FC,$A0,$50,$B6,$BC,$A0,$F1,$B7,$BC,$80,
-                                            $04,$BC,$FC,$A0,$08,$BE,$FC,$A0,$50,$B6,$BC,$F8,$4D,$E8,$BF,$64,
-                                            $01,$B0,$FC,$21,$50,$B6,$BC,$F8,$4D,$E8,$BF,$70,$12,$BE,$FC,$E4,
-                                            $50,$B6,$BC,$F8,$4D,$E8,$BF,$68,$0F,$BC,$FC,$E4,$48,$24,$BC,$80,
-                                            $0E,$BA,$FC,$E4,$51,$A0,$BC,$A0,$53,$44,$FC,$50,$60,$B2,$FC,$A0,
-                                            $59,$5E,$BC,$54,$59,$60,$BC,$54,$59,$62,$BC,$54,$04,$BC,$FC,$A0,
-                                            $53,$B4,$BC,$A0,$52,$B6,$BC,$A1,$00,$B8,$FC,$A0,$80,$B8,$FC,$72,
-                                            $F2,$99,$3C,$61,$25,$B4,$F8,$E4,$36,$00,$78,$5C,$F1,$B7,$BC,$80,
-                                            $50,$B6,$BC,$F8,$F2,$99,$3C,$61,$00,$B9,$FC,$70,$01,$B8,$FC,$29,
-                                            $2A,$00,$4C,$5C,$FF,$C0,$FC,$64,$5C,$C0,$BC,$68,$08,$C0,$FC,$20,
-                                            $54,$44,$FC,$50,$22,$BC,$FC,$E4,$01,$B2,$FC,$80,$1E,$00,$7C,$5C,
-                                            $22,$B4,$BC,$A0,$FF,$B5,$FC,$60,$53,$B4,$7C,$86,$00,$8E,$68,$0C,
-                                            $58,$C0,$3C,$C2,$09,$00,$54,$5C,$01,$B0,$FC,$C1,$62,$00,$70,$5C,
-                                            $62,$B2,$FC,$84,$45,$C4,$3C,$08,$04,$8A,$FC,$80,$48,$7E,$BC,$80,
-                                            $3F,$B2,$FC,$E4,$62,$7E,$FC,$54,$09,$00,$7C,$5C,$00,$00,$00,$00,
+  RawLoaderImage : array[0..391] of byte = ($00,$B4,$C4,$04,$6F,$2B,$10,$00,$88,$01,$90,$01,$80,$01,$94,$01,
+                                            $78,$01,$02,$00,$70,$01,$00,$00,$4D,$E8,$BF,$A0,$4D,$EC,$BF,$A0,
+                                            $51,$B8,$BC,$A1,$01,$B8,$FC,$28,$F1,$B9,$BC,$80,$A0,$B6,$CC,$A0,
+                                            $51,$B8,$BC,$F8,$F2,$99,$3C,$61,$05,$B6,$FC,$E4,$59,$24,$FC,$54,
+                                            $62,$B4,$BC,$A0,$02,$BC,$FC,$A0,$51,$B8,$BC,$A0,$F1,$B9,$BC,$80,
+                                            $04,$BE,$FC,$A0,$08,$C0,$FC,$A0,$51,$B8,$BC,$F8,$4D,$E8,$BF,$64,
+                                            $01,$B2,$FC,$21,$51,$B8,$BC,$F8,$4D,$E8,$BF,$70,$12,$C0,$FC,$E4,
+                                            $51,$B8,$BC,$F8,$4D,$E8,$BF,$68,$0F,$BE,$FC,$E4,$48,$24,$BC,$80,
+                                            $0E,$BC,$FC,$E4,$52,$A2,$BC,$A0,$54,$44,$FC,$50,$61,$B4,$FC,$A0,
+                                            $5A,$5E,$BC,$54,$5A,$60,$BC,$54,$5A,$62,$BC,$54,$04,$BE,$FC,$A0,
+                                            $54,$B6,$BC,$A0,$53,$B8,$BC,$A1,$00,$BA,$FC,$A0,$80,$BA,$FC,$72,
+                                            $F2,$99,$3C,$61,$25,$B6,$F8,$E4,$36,$00,$78,$5C,$F1,$B9,$BC,$80,
+                                            $51,$B8,$BC,$F8,$F2,$99,$3C,$61,$00,$BB,$FC,$70,$01,$BA,$FC,$29,
+                                            $2A,$00,$4C,$5C,$FF,$C2,$FC,$64,$5D,$C2,$BC,$68,$08,$C2,$FC,$20,
+                                            $55,$44,$FC,$50,$22,$BE,$FC,$E4,$01,$B4,$FC,$80,$1E,$00,$7C,$5C,
+                                            $22,$B6,$BC,$A0,$FF,$B7,$FC,$60,$54,$B6,$7C,$86,$00,$8E,$68,$0C,
+                                            $59,$C2,$3C,$C2,$09,$00,$54,$5C,$01,$B2,$FC,$C1,$63,$00,$70,$5C,
+                                            $63,$B4,$FC,$84,$45,$C6,$3C,$08,$04,$8A,$FC,$80,$48,$7E,$BC,$80,
+                                            $3F,$B4,$FC,$E4,$63,$7E,$FC,$54,$09,$00,$7C,$5C,$00,$00,$00,$00,
                                             $00,$00,$00,$00,$80,$00,$00,$00,$00,$02,$00,$00,$00,$80,$00,$00,
                                             $FF,$FF,$F9,$FF,$10,$C0,$07,$00,$00,$00,$00,$80,$00,$00,$00,$40,
-                                            $00,$00,$00,$20,$00,$00,$00,$10,$B6,$02,$00,$00,$5B,$01,$00,$00,
-                                            $08,$02,$00,$00,$55,$73,$CB,$00,$50,$45,$01,$00,$30,$00,$00,$00,
-                                            $30,$00,$00,$00,$68,$00,$00,$00,$00,$00,$00,$00,$35,$C7,$08,$35,
-                                            $2C,$32,$00,$00);
+                                            $00,$00,$00,$20,$00,$00,$00,$10,$6F,$00,$00,$00,$B6,$02,$00,$00,
+                                            $56,$00,$00,$00,$82,$00,$00,$00,$55,$73,$CB,$00,$18,$51,$00,$00,
+                                            $30,$00,$00,$00,$30,$00,$00,$00,$68,$00,$00,$00,$00,$00,$00,$00,
+                                            $35,$C7,$08,$35,$2C,$32,$00,$00);
 
   {Offset (in bytes) from end of Raw Loader Image (above) to the start of host-initialized values exist within it.  Host-Initialized values are
    constants in the source (Propeller Assembly code) that are intended to be replaced by the host (the computer running 'this' code) before
@@ -1307,52 +1307,52 @@ const
    Host-Initialized Values are Initial Bit Time, Final Bit Time, 1.5x Bit Time, Failsafe timeout, End of Packet Timeout, Start/Stop Time,
    SCL High Time, SCL Low Time, and ExpectedID.  In addition to replacing these values, the host needs to update the image checksum at word 5.}
 
-                         {Value Bytes  {Spin Bytes}
-  RawLoaderInitOffset = - (   9*4   ) - (    8   );     {NOTE: DAT block data is always placed before the first Spin method}
+                          {Value Bytes  Spin Bytes}
+  RawLoaderInitOffset = - (   10*4   ) - (    8   );     {NOTE: DAT block data is always placed before the first Spin method}
 
   {Maximum number of cycles by which the detection of a start bit could be off (as affected by the Loader code)}
   MaxRxSenseError = 23;
 
   {Loader VerifyRAM snippet}
-  VerifyRAM : array[0..67] of byte = ($49,$BA,$BC,$A0,$45,$BA,$BC,$84,$02,$BA,$FC,$2A,$45,$8C,$14,$08,
-                                      $04,$8A,$D4,$80,$65,$BA,$D4,$E4,$0A,$BA,$FC,$04,$04,$BA,$FC,$84,
-                                      $5D,$94,$3C,$08,$04,$BA,$FC,$84,$5D,$94,$3C,$08,$01,$8A,$FC,$84,
-                                      $45,$BC,$BC,$00,$5E,$8C,$BC,$80,$6D,$8A,$7C,$E8,$46,$B0,$BC,$A4,
+  VerifyRAM : array[0..67] of byte = ($49,$BC,$BC,$A0,$45,$BC,$BC,$84,$02,$BC,$FC,$2A,$45,$8C,$14,$08,
+                                      $04,$8A,$D4,$80,$66,$BC,$D4,$E4,$0A,$BC,$FC,$04,$04,$BC,$FC,$84,
+                                      $5E,$94,$3C,$08,$04,$BC,$FC,$84,$5E,$94,$3C,$08,$01,$8A,$FC,$84,
+                                      $45,$BE,$BC,$00,$5F,$8C,$BC,$80,$6E,$8A,$7C,$E8,$46,$B2,$BC,$A4,
                                       $09,$00,$7C,$5C);
 
   {Loader ProgramVerifyEEPROM snippet}
-  ProgramVerifyEEPROM : array[0..315] of byte = ($03,$8C,$FC,$2C,$4F,$EC,$BF,$68,$81,$16,$FD,$5C,$40,$BC,$FC,$A0,
-                                                 $45,$B8,$BC,$00,$9F,$60,$FD,$5C,$78,$00,$70,$5C,$01,$8A,$FC,$80,
-                                                 $66,$BC,$FC,$E4,$8E,$3C,$FD,$5C,$49,$8A,$3C,$86,$64,$00,$54,$5C,
-                                                 $00,$8A,$FC,$A0,$49,$BC,$BC,$A0,$7C,$00,$FD,$5C,$A2,$60,$FD,$5C,
-                                                 $45,$BE,$BC,$00,$5C,$BE,$3C,$86,$78,$00,$54,$5C,$01,$8A,$FC,$80,
-                                                 $71,$BC,$FC,$E4,$01,$8C,$FC,$28,$8E,$3C,$FD,$5C,$01,$8C,$FC,$28,
-                                                 $46,$B0,$BC,$A4,$09,$00,$7C,$5C,$81,$16,$FD,$5C,$A1,$B8,$FC,$A0,
-                                                 $8C,$60,$FD,$5C,$78,$00,$70,$5C,$00,$00,$7C,$5C,$FF,$BB,$FC,$A0,
-                                                 $A0,$B8,$FC,$A0,$8C,$60,$FD,$5C,$82,$BA,$F0,$E4,$45,$B8,$8C,$A0,
-                                                 $08,$B8,$CC,$28,$9F,$60,$CD,$5C,$45,$B8,$8C,$A0,$9F,$60,$CD,$5C,
-                                                 $78,$00,$70,$5C,$00,$00,$7C,$5C,$47,$8E,$3C,$62,$8F,$00,$7C,$5C,
-                                                 $47,$8E,$3C,$66,$09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,
-                                                 $4F,$E8,$BF,$64,$4E,$EC,$BF,$78,$55,$B6,$BC,$F8,$4F,$E8,$BF,$68,
-                                                 $F2,$9D,$3C,$61,$55,$B6,$BC,$F8,$4E,$EC,$BB,$7C,$00,$B6,$F8,$F8,
-                                                 $F2,$9D,$28,$61,$90,$BE,$CC,$E4,$78,$00,$44,$5C,$7A,$00,$48,$5C,
-                                                 $00,$00,$68,$5C,$01,$B8,$FC,$2C,$01,$B8,$FC,$68,$A3,$00,$7C,$5C,
-                                                 $FE,$B9,$FC,$A0,$09,$BE,$FC,$A0,$57,$B6,$BC,$A0,$F1,$B7,$BC,$80,
-                                                 $4F,$E8,$BF,$64,$00,$B9,$7C,$62,$01,$B8,$FC,$34,$4E,$EC,$BF,$78,
-                                                 $56,$B6,$BC,$F8,$4F,$E8,$BF,$68,$F2,$9D,$3C,$61,$57,$B6,$BC,$F8,
-                                                 $A6,$BE,$FC,$E4,$FF,$B8,$FC,$60,$00,$00,$7C,$5C);
-
+  ProgramVerifyEEPROM : array[0..315] of byte = ($03,$8C,$FC,$2C,$4F,$EC,$BF,$68,$82,$18,$FD,$5C,$40,$BE,$FC,$A0,
+                                                 $45,$BA,$BC,$00,$A0,$62,$FD,$5C,$79,$00,$70,$5C,$01,$8A,$FC,$80,
+                                                 $67,$BE,$FC,$E4,$8F,$3E,$FD,$5C,$49,$8A,$3C,$86,$65,$00,$54,$5C,
+                                                 $00,$8A,$FC,$A0,$49,$BE,$BC,$A0,$7D,$02,$FD,$5C,$A3,$62,$FD,$5C,
+                                                 $45,$C0,$BC,$00,$5D,$C0,$3C,$86,$79,$00,$54,$5C,$01,$8A,$FC,$80,
+                                                 $72,$BE,$FC,$E4,$01,$8C,$FC,$28,$8F,$3E,$FD,$5C,$01,$8C,$FC,$28,
+                                                 $46,$B2,$BC,$A4,$09,$00,$7C,$5C,$82,$18,$FD,$5C,$A1,$BA,$FC,$A0,
+                                                 $8D,$62,$FD,$5C,$79,$00,$70,$5C,$00,$00,$7C,$5C,$FF,$BD,$FC,$A0,
+                                                 $A0,$BA,$FC,$A0,$8D,$62,$FD,$5C,$83,$BC,$F0,$E4,$45,$BA,$8C,$A0,
+                                                 $08,$BA,$CC,$28,$A0,$62,$CD,$5C,$45,$BA,$8C,$A0,$A0,$62,$CD,$5C,
+                                                 $79,$00,$70,$5C,$00,$00,$7C,$5C,$47,$8E,$3C,$62,$90,$00,$7C,$5C,
+                                                 $47,$8E,$3C,$66,$09,$C0,$FC,$A0,$58,$B8,$BC,$A0,$F1,$B9,$BC,$80,
+                                                 $4F,$E8,$BF,$64,$4E,$EC,$BF,$78,$56,$B8,$BC,$F8,$4F,$E8,$BF,$68,
+                                                 $F2,$9D,$3C,$61,$56,$B8,$BC,$F8,$4E,$EC,$BB,$7C,$00,$B8,$F8,$F8,
+                                                 $F2,$9D,$28,$61,$91,$C0,$CC,$E4,$79,$00,$44,$5C,$7B,$00,$48,$5C,
+                                                 $00,$00,$68,$5C,$01,$BA,$FC,$2C,$01,$BA,$FC,$68,$A4,$00,$7C,$5C,
+                                                 $FE,$BB,$FC,$A0,$09,$C0,$FC,$A0,$58,$B8,$BC,$A0,$F1,$B9,$BC,$80,
+                                                 $4F,$E8,$BF,$64,$00,$BB,$7C,$62,$01,$BA,$FC,$34,$4E,$EC,$BF,$78,
+                                                 $57,$B8,$BC,$F8,$4F,$E8,$BF,$68,$F2,$9D,$3C,$61,$58,$B8,$BC,$F8,
+                                                 $A7,$C0,$FC,$E4,$FF,$BA,$FC,$60,$00,$00,$7C,$5C);
   {Loader LaunchStart snippet}
-  LaunchStart : array[0..27] of byte = ($B8,$72,$FC,$58,$65,$72,$FC,$50,$09,$00,$7C,$5C,$06,$8A,$FC,$04,
-                                        $10,$8A,$7C,$86,$00,$8E,$54,$0C,$02,$96,$7C,$0C);
+  ReadyToLaunch : array[0..59] of byte = ($B8,$72,$FC,$58,$66,$72,$FC,$50,$09,$00,$7C,$5C,$06,$BE,$FC,$04,
+                                          $10,$BE,$7C,$86,$00,$8E,$54,$0C,$04,$BE,$FC,$00,$78,$BE,$FC,$60,
+                                          $50,$BE,$BC,$68,$00,$BE,$7C,$0C,$40,$AE,$FC,$2C,$6E,$AE,$FC,$E4,
+                                          $04,$BE,$FC,$00,$00,$BE,$7C,$0C,$02,$96,$7C,$0C);
 
   {Loader LaunchFinal snippet}
-  LaunchFinal : array[0..15] of byte = ($06,$8A,$FC,$04,$10,$8A,$7C,$86,$00,$8E,$54,$0C,$02,$96,$7C,$0C);
+  LaunchNow : array[0..3] of byte = ($66,$00,$7C,$5C);
 
   {Loader executable snippets}
-  ExeSnippet : array[ltVerifyRAM..ltLaunchFinal] of PByteArray =  (@VerifyRAM, @ProgramVerifyEEPROM, @LaunchStart, @LaunchFinal);
-  ExeSnippetSize : array[ltVerifyRAM..ltLaunchFinal] of Integer = (Length(VerifyRAM), Length(ProgramVerifyEEPROM), Length(LaunchStart), Length(LaunchFinal));
-
+  ExeSnippet : array[ltVerifyRAM..ltLaunchNow] of PByteArray =  (@VerifyRAM, @ProgramVerifyEEPROM, @ReadyToLaunch, @LaunchNow);
+  ExeSnippetSize : array[ltVerifyRAM..ltLaunchNow] of Integer = (Length(VerifyRAM), Length(ProgramVerifyEEPROM), Length(ReadyToLaunch), Length(LaunchNow));
 
   InitCallFrame : array [0..7] of byte = ($FF, $FF, $F9, $FF, $FF, $FF, $F9, $FF);
 
@@ -1384,18 +1384,19 @@ begin
     try {Reserved memory}
       {Prepare Loader Image with patched clock metrics and host-initialized values}
       Move(RawLoaderImage, LoaderImage[0], RawSize*4);                                                              {Copy raw loader image to LoaderImage (for adjustments and processing)}
-      PatchLoaderLongValue(0, ClockSpeed);                                                                          {Set system clock speed}
-      LoaderImage[4] := ClockMode;                                                                                  {Set system clock mode}
+      PatchLoaderLongValue(0, ClockSpeed);                                                                          {Set booter's clock speed}
+      LoaderImage[4] := ClockMode;                                                                                  {Set booter's clock mode}
       SetRoundMode(rmNearest);
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset, Round(ClockSpeed / InitialBaud));                         {Initial Bit Time}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 4, Round(ClockSpeed / FinalBaud));                       {Final Bit Time}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 8, Round(((1.5 * ClockSpeed) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 12, 2 * ClockSpeed div (3 * 4));                         {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 16, Round(2 * ClockSpeed / FinalBaud * 10 / 12));        {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 20, Max(Round(ClockSpeed * SSSHTime), 14));              {Minimum EEPROM Start/Stop Condition setup/hold time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(ClockSpeed * SCLHighTime), 14));           {Minimum EEPROM SCL high time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(ClockSpeed * SCLLowTime), 26));            {Minimum EEPROM SCL low time (400 KHz = 1/1.3 µS); Minimum 26 cycles}
-      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 32, PacketID);                                           {First Expected Packet ID; total packet count}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset +  0, ClockMode and $07);                                  {Booter's clock selection bits}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset +  4, Round(ClockSpeed / InitialBaud));                    {Initial Bit Time}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset +  8, Round(ClockSpeed / FinalBaud));                      {Final Bit Time}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 12, Round(((1.5 * ClockSpeed) / FinalBaud) - MaxRxSenseError));  {1.5x Final Bit Time minus maximum start bit sense error}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 16, 2 * ClockSpeed div (3 * 4));                         {Failsafe Timeout (seconds-worth of Loader's Receive loop iterations)}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 20, Round(2 * ClockSpeed / FinalBaud * 10 / 12));        {EndOfPacket Timeout (2 bytes worth of Loader's Receive loop iterations)}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 24, Max(Round(ClockSpeed * SSSHTime), 14));              {Minimum EEPROM Start/Stop Condition setup/hold time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 28, Max(Round(ClockSpeed * SCLHighTime), 14));           {Minimum EEPROM SCL high time (400 KHz = 1/0.6 µS); Minimum 14 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 32, Max(Round(ClockSpeed * SCLLowTime), 26));            {Minimum EEPROM SCL low time (400 KHz = 1/1.3 µS); Minimum 26 cycles}
+      PatchLoaderLongValue(RawSize*4+RawLoaderInitOffset + 36, PacketID);                                           {First Expected Packet ID; total packet count}
       {Recalculate and update checksum}
       Checksum := 0;                                                                                                {Clear checksum}
       LoaderImage[5] := Checksum;
