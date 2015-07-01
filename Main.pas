@@ -26,6 +26,7 @@ type
     MacAddrHigh : Cardinal;                   {Upper 16 bits of MAC address}
     MacAddrLow  : Cardinal;                   {Lower 32 bits of MAC address}
     NodeID      : String;                     {Friendly Node ID}
+    FirmwareVer : Cardinal;                   {XBee's firmware version}
     CfgChecksum : Cardinal;                   {Configuration checksum}
   end;
 
@@ -142,7 +143,7 @@ const
   MinSerTimeout     = 100;
   SerTimeout        = 1000;
   AppTimeout        = 200;
-  CSumUnknown       = $FFFFFFFF;          {Unknown checksum value}
+  ValueUnknown      = $FFFFFFFF;          {Unknown value; for checksum and firmware}
   ImageLimit        = 32768;              {Max size of Propeller Application image file}
 
   DynamicWaitFactor = 2;                  {Multiply factor for dynamic waits; x times maximum round-trip time}
@@ -341,7 +342,8 @@ var
   PXB : PXbee;
 begin
   PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
-  PXB.CfgChecksum := CSumUnknown;
+  PXB.FirmwareVer := ValueUnknown;
+  PXB.CfgChecksum := ValueUnknown;
 end;
 
 {----------------------------------------------------------------------------------------------------}
@@ -642,38 +644,40 @@ var
           {Create XBee Info block and fill with identifying information}
           SetLength(XBeeInfoList, Length(XBeeInfoList)+1);
           PXB := @XBeeInfoList[High(XBeeInfoList)];
-          PXB.CfgChecksum := CSumUnknown;
+          PXB.FirmwareVer := ValueUnknown;
+          PXB.CfgChecksum := ValueUnknown;
           PXB.HostIPAddr := HostIP;
           PXB.IPAddr := FormatIPAddr(Nums[Idx]);
           XBee.RemoteIPAddr := PXB.IPAddr;
-          if XBee.GetItem(xbIPPort, PXB.IPPort) then
-            if XBee.GetItem(xbMacHigh, PXB.MacAddrHigh) then
-              if XBee.GetItem(xbMacLow, PXB.MacAddrLow) then
-                if XBee.GetItem(xbNodeID, PXB.NodeID) then
-                  begin
-                  {Create pseudo-port name}
-                  PXB.PCPort := 'XB-' + ifthen(PXB.NodeID.Trim <> '', PXB.NodeID, inttohex(PXB.MacAddrHigh, 4) + inttohex(PXB.MacAddrLow, 8));
-                  {Check for duplicates}
-                  ComboIdx := PCPortCombo.Items.IndexOf(PXB.PCPort);
-                  SendDebugMessage('Checking for duplicates.  XBIdx: ' + ComboIdx.ToString, True);
-                  if ComboIdx > -1 then
+          if XBee.GetItem(xbFirmwareVer, PXB.FirmwareVer) then
+            if XBee.GetItem(xbIPPort, PXB.IPPort) then
+              if XBee.GetItem(xbMacHigh, PXB.MacAddrHigh) then
+                if XBee.GetItem(xbMacLow, PXB.MacAddrLow) then
+                  if XBee.GetItem(xbNodeID, PXB.NodeID) then
                     begin
-                    SendDebugMessage('PCPortCombo Length: ' + PCPortCombo.Count.ToString, True);
-                    SendDebugMessage('Obj Address: ' + Integer(PCPortCombo.ListItems[ComboIdx].Tag).ToString, True);
-                    SendDebugMessage('Obj IPAddr: ' + XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr, True);
+                    {Create pseudo-port name}
+                    PXB.PCPort := 'XB-' + ifthen(PXB.NodeID.Trim <> '', PXB.NodeID, inttohex(PXB.MacAddrHigh, 4) + inttohex(PXB.MacAddrLow, 8));
+                    {Check for duplicates}
+                    ComboIdx := PCPortCombo.Items.IndexOf(PXB.PCPort);
+                    SendDebugMessage('Checking for duplicates.  XBIdx: ' + ComboIdx.ToString, True);
+                    if ComboIdx > -1 then
+                      begin
+                      SendDebugMessage('PCPortCombo Length: ' + PCPortCombo.Count.ToString, True);
+                      SendDebugMessage('Obj Address: ' + Integer(PCPortCombo.ListItems[ComboIdx].Tag).ToString, True);
+                      SendDebugMessage('Obj IPAddr: ' + XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr, True);
+                      end;
+                    if (ComboIdx = -1) or (XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr <> PXB.IPAddr) then    {Add only unique XBee modules found; ignore duplicates}
+                      begin
+                      SendDebugMessage('Adding unique record: ' + High(XBeeInfoList).ToString, True);
+                      PCPortCombo.ListItems[PCPortCombo.Items.Add(PXB.PCPort)].Tag := High(XBeeInfoList);
+                      end
+                    else
+                      begin
+                      SendDebugMessage('Deleting record', True);
+                      SetLength(XBeeInfoList, Length(XBeeInfoList)-1);                                              {Else remove info record}
+                      end;
+                    SendDebugMessage('Done checking for duplicates', True);
                     end;
-                  if (ComboIdx = -1) or (XBeeInfoList[PCPortCombo.ListItems[ComboIdx].Tag].IPAddr <> PXB.IPAddr) then    {Add only unique XBee modules found; ignore duplicates}
-                    begin
-                    SendDebugMessage('Adding unique record: ' + High(XBeeInfoList).ToString, True);
-                    PCPortCombo.ListItems[PCPortCombo.Items.Add(PXB.PCPort)].Tag := High(XBeeInfoList);
-                    end
-                  else
-                    begin
-                    SendDebugMessage('Deleting record', True);
-                    SetLength(XBeeInfoList, Length(XBeeInfoList)-1);                                              {Else remove info record}
-                    end;
-                  SendDebugMessage('Done checking for duplicates', True);
-                  end;
           end;
         end;
     end;
@@ -1081,16 +1085,17 @@ begin
 { TODO : Enhance Enforce... to log any error }
   PXB := @XBeeInfoList[PCPortCombo.ListItems[PCPortCombo.ItemIndex].Tag];
 
-  if AlwaysConfigure.IsChecked then PXB.CfgChecksum := CSumUnknown;
+  if AlwaysConfigure.IsChecked then PXB.CfgChecksum := ValueUnknown;
   
   if ShowProgress then InitializeProgress(16);
   try
     if ShowProgress then UpdateProgress(+1, 'Verifying configuration');
-    Result := (PXB.CfgChecksum <> CSumUnknown) and (Validate(xbChecksum, PXB.CfgChecksum, True));   {Is the configuration known and valid?}
+    Result := (PXB.CfgChecksum <> ValueUnknown) and (Validate(xbChecksum, PXB.CfgChecksum, True));  {Is the configuration known and valid?}
     if not Result then
       begin                                                                                         {If not...}
       if ShowProgress then UpdateProgress(+1, 'Validating SerialIP (IP)');
-      Validate(xbSerialIP, ifthen(SetUDP.IsChecked, SerialUDP, SerialTCP), not EnableIP.IsChecked); {  Ensure XBee's Serial Service uses UDP packets}
+      Validate(xbSerialIP, ifthen(SetUDP.IsChecked, SerialUDP, SerialTCP),                          {  Ensure XBee's Serial Service uses UDP packets}
+                           (PXB.FirmwareVer < $2023) or (not EnableIP.IsChecked));                  {    force to read only for firmware older than v2023}
       if ShowProgress then UpdateProgress(+1, 'Validating IPDestination (DL)');
       Validate(xbIPDestination, HostIPAddr);                                                        {  Ensure Serial-to-IP destination is us (our IP)}
       if ShowProgress then UpdateProgress(+1, 'Validating OutputMask (OM)');
@@ -1107,7 +1112,8 @@ begin
       Validate(xbIO2Timer, 1);                                                                      {  Ensure reset pin's timer is set to 100 ms}
       if ShowProgress then UpdateProgress(+1, 'Validating SerialMode (AP)');
       Validate(xbSerialMode, ifthen(SetTransparent.IsChecked, TransparentMode,                      {  Ensure Serial Mode is transparent}
-                             ifthen(SetAPI.IsChecked, APIwoEscapeMode, APIwEscapeMode)), not EnableAP.IsChecked);
+                             ifthen(SetAPI.IsChecked, APIwoEscapeMode, APIwEscapeMode)),
+                             (PXB.FirmwareVer < $2023) or (not EnableAP.IsChecked));                {    force to read only for firmware older than v2023}
       if ShowProgress then UpdateProgress(+1, 'Validating SerialBaud (BD)');
       Validate(xbSerialBaud, InitialBaud);                                                          {  Ensure baud rate is set to initial speed}
       if ShowProgress then UpdateProgress(+1, 'Validating SerialParity (NB)');

@@ -33,12 +33,14 @@ THINGS TO DO
   * Determine necessesity of EE_Shutdown code 
 * Enhance to reset XBee settings at end of download
 * Add rigorous testing and logging feature
-* Determine why it delays so long for EEPROM programming response
+* Fix EEPROM programming response timeout
+
 
 * Consider
   * Recording and restoring previous settings when done
     * This may be simpler with a single command, if there is one.
   * Resetting XBee I/O pin configuration to a disabled state after download?
+  * Adding feature to stop and warn user of SerialIP (IP) or SerialMode (AP) settings being incorrect (on firmware versions < $2023).
 
 
 THINGS DEFERRED
