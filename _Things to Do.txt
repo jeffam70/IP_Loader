@@ -34,7 +34,8 @@ THINGS TO DO
 * Enhance to reset XBee settings at end of download
 * Add rigorous testing and logging feature
 * Fix EEPROM programming response timeout
-
+* Recheck initial RAM Checksum response window and consider slowing the initial baud rate so that
+  the 2nd packet (timing pulses) surely embraces the whole possible response window.
 
 * Consider
   * Recording and restoring previous settings when done
